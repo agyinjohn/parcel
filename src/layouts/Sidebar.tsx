@@ -65,11 +65,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 
             {/* Sidebar */}
             <aside
-                className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white transition-transform duration-200 ease-in-out lg:translate-x-0 border-r border-[#d1d1d1] flex flex-col ${isOpen ? "translate-x-0" : "-translate-x-full"
+                className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white dark:bg-gray-900 transition-transform duration-200 ease-in-out lg:translate-x-0 border-r border-[#d1d1d1] dark:border-gray-700 flex flex-col ${isOpen ? "translate-x-0" : "-translate-x-full"
                     }`}
             >
                 {/* Header with Logo - Fixed at top */}
-                <div className="flex h-auto flex-col items-center gap-3 border-b border-[#d1d1d1] p-4 text-center flex-shrink-0">
+                <div className="flex h-auto flex-col items-center gap-3 border-b border-[#d1d1d1] dark:border-gray-700 p-4 text-center flex-shrink-0">
                     <div className="flex items-center justify-between w-full lg:justify-center">
                         <img
                             className="h-[100px] w-[100px] object-cover"
@@ -78,22 +78,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                         />
                         <button
                             onClick={onToggle}
-                            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+                            className="rounded-lg p-2 text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800 lg:hidden"
                         >
                             <X size={24} />
                         </button>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                        <div className="font-semibold text-[#ea690c]">
+                        <div className="font-semibold text-[#ea690c] dark:text-orange-500">
                             Mealex &amp; Mailex
                         </div>
-                        <div className="font-semibold text-neutral-800">
+                        <div className="font-semibold text-neutral-800 dark:text-gray-100">
                             (M&amp;M)
                         </div>
                     </div>
 
-                    <div className="text-sm font-semibold text-[#5d5d5d]">
+                    <div className="text-sm font-semibold text-[#5d5d5d] dark:text-gray-400">
                         Parcel Delivery System
                     </div>
                 </div>
@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                                 onClick={onToggle}
                                 className={`flex items-center gap-3 rounded-xl px-4 py-3 font-medium transition-colors ${isActive
                                     ? "bg-[#ea690c] text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
-                                    : "border border-transparent text-[#5d5d5d] hover:border-[#f0f0f0] hover:bg-gray-50"
+                                    : "border border-transparent text-[#5d5d5d] dark:text-gray-300 hover:border-[#f0f0f0] dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                                     }`}
                             >
                                 <Icon size={20} />
@@ -122,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                 </nav>
 
                 {/* Logout Button Only - User info shown in navbar - Fixed at bottom */}
-                <div className="border-t border-[#d1d1d1] p-4 flex-shrink-0">
+                <div className="border-t border-[#d1d1d1] dark:border-gray-700 p-4 flex-shrink-0">
                     <button
                         onClick={() => setShowLogoutConfirm(true)}
                         className="flex w-full items-center gap-3 rounded-xl bg-red-50 px-4 py-3 font-medium text-[#e22420] transition-colors hover:bg-red-100"
@@ -136,13 +136,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
             {/* Logout Confirm Modal */}
             {showLogoutConfirm && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] w-full max-w-sm p-6">
-                        <h3 className="text-base font-bold text-neutral-800 mb-1">Confirm Logout</h3>
-                        <p className="text-sm text-[#5d5d5d] mb-5">Are you sure you want to log out?</p>
+                    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#d1d1d1] dark:border-gray-700 w-full max-w-sm p-6">
+                        <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Confirm Logout</h3>
+                        <p className="text-sm text-[#5d5d5d] dark:text-gray-400 mb-5">Are you sure you want to log out?</p>
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowLogoutConfirm(false)}
-                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] text-sm font-medium text-neutral-700 hover:bg-gray-50 transition-colors"
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] dark:border-gray-700 text-sm font-medium text-neutral-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                             >
                                 Cancel
                             </button>

@@ -34,6 +34,7 @@ import type {
   StationEarningsPeriod,
 } from "../../../services/dummyDataGenerator";
 import { RiderDetailModal } from "./RiderDetailModal";
+import { exportService } from "../../../services/exportService";
 
 // MUI X Charts
 import { LineChart } from "@mui/x-charts/LineChart";
@@ -129,8 +130,82 @@ export const AdminFinancialDashboard = (): JSX.Element => {
     setTimeout(() => setLoading(false), 1000);
   };
 
-  const handleExport = () => {
-    alert("Export functionality - Generate PDF/Excel report");
+  const handleExport = (format: 'pdf' | 'excel') => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `Financial_Report_${selectedOfficeName.replace(/\s+/g, '_')}_${timestamp}`;
+
+    if (activeTab === 'overview') {
+      const columns = [
+        { header: 'Station', key: 'stationName', width: 20 },
+        { header: 'Parcels', key: 'parcels', width: 12 },
+        { header: 'Revenue', key: 'revenue', width: 15 },
+        { header: 'Delivery Rate', key: 'deliveryRate', width: 15 },
+      ];
+      const data = dashboardData.stationPerformance.map(s => ({
+        stationName: s.stationName,
+        parcels: s.parcels,
+        revenue: formatCurrency(s.revenue),
+        deliveryRate: `${s.deliveryRate}%`,
+      }));
+      const options = {
+        title: 'Financial Overview Report',
+        subtitle: `${selectedOfficeName} — ${dateRange} days`,
+        columns,
+        data,
+        filename,
+      };
+      format === 'pdf' ? exportService.exportToPDF(options) : exportService.exportToExcel(options);
+    } else if (activeTab === 'riders') {
+      const columns = [
+        { header: 'Rank', key: 'rank', width: 8 },
+        { header: 'Rider Name', key: 'riderName', width: 20 },
+        { header: 'Deliveries', key: 'deliveries', width: 12 },
+        { header: 'Failed', key: 'failed', width: 10 },
+        { header: 'Revenue', key: 'revenue', width: 15 },
+        { header: 'Outstanding', key: 'outstanding', width: 15 },
+        { header: 'Rating', key: 'rating', width: 10 },
+        { header: 'Avg Time', key: 'avgDeliveryTime', width: 12 },
+      ];
+      const data = dashboardData.riderPerformance.map((r, i) => ({
+        rank: i + 1,
+        riderName: r.riderName,
+        deliveries: r.deliveries,
+        failed: r.failed,
+        revenue: formatCurrency(r.revenue),
+        outstanding: formatCurrency(r.outstanding),
+        rating: r.rating,
+        avgDeliveryTime: `${r.avgDeliveryTime}h`,
+      }));
+      const options = {
+        title: 'Rider Performance Report',
+        subtitle: `${selectedOfficeName} — ${dateRange} days`,
+        columns,
+        data,
+        filename,
+      };
+      format === 'pdf' ? exportService.exportToPDF(options) : exportService.exportToExcel(options);
+    } else {
+      const columns = [
+        { header: 'Date', key: 'date', width: 15 },
+        { header: 'Revenue', key: 'revenue', width: 15 },
+        { header: 'Collected', key: 'collected', width: 15 },
+        { header: 'Outstanding', key: 'outstanding', width: 15 },
+      ];
+      const data = dashboardData.revenueTrend.map(d => ({
+        date: new Date(d.date).toLocaleDateString(),
+        revenue: formatCurrency(d.revenue),
+        collected: formatCurrency(d.collected),
+        outstanding: formatCurrency(d.outstanding),
+      }));
+      const options = {
+        title: `${activeTab === 'revenue' ? 'Revenue Analytics' : 'Operations'} Report`,
+        subtitle: `${selectedOfficeName} — ${dateRange} days`,
+        columns,
+        data,
+        filename,
+      };
+      format === 'pdf' ? exportService.exportToPDF(options) : exportService.exportToExcel(options);
+    }
   };
 
   // KPI Cards Configuration
@@ -200,13 +275,13 @@ export const AdminFinancialDashboard = (): JSX.Element => {
   ] as const;
 
   return (
-    <div className="w-full bg-gray-50 min-h-screen">
+    <div className="w-full bg-gray-50 dark:bg-gray-950 min-h-screen">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 px-4 py-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1600px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-800 tracking-tight">Financial Analytics</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-neutral-800 dark:text-gray-100 tracking-tight">Financial Analytics</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               {selectedOfficeName} — Comprehensive performance insights
             </p>
           </div>
@@ -220,29 +295,35 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button onClick={handleExport} className="bg-[#ea690c] hover:bg-[#d45e0a] active:scale-95 transition-transform">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => handleExport('pdf')} className="bg-[#ea690c] hover:bg-[#d45e0a] active:scale-95 transition-transform">
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+              <Button onClick={() => handleExport('excel')} variant="outline" className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 active:scale-95 transition-transform">
+                <Download className="w-4 h-4 mr-2" />
+                Excel
+              </Button>
+            </div>
           </div>
         </div>
       </div>
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 space-y-6">
 
         {/* Filters */}
-        <Card className="border border-gray-200 bg-white shadow-sm">
+        <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
                   Station
                 </label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <Building2 className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                   <select
                     value={selectedOfficeId}
                     onChange={(e) => setSelectedOfficeId(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                   >
                     <option value="all">All Stations</option>
                     {stationsLoading ? (
@@ -258,15 +339,15 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                 </div>
               </div>
               <div className="flex-1 min-w-[160px]">
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">
                   Date Range
                 </label>
                 <div className="relative">
-                  <CalendarIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <CalendarIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                   <select
                     value={dateRange}
                     onChange={(e) => setDateRange(e.target.value as "7" | "30" | "90")}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                   >
                     <option value="7">Last 7 Days</option>
                     <option value="30">Last 30 Days</option>
@@ -303,7 +384,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <Icon className={`w-5 h-5 ${card.color} group-hover:scale-110 transition-transform duration-300`} />
                     </div>
                     <p className={`text-xl font-bold ${card.color} mb-1 tracking-tight`}>{card.value}</p>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">{card.label}</p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">{card.label}</p>
                     <div className="flex items-center gap-1">
                       <TrendIcon className={`w-3 h-3 ${card.trendUp ? "text-green-600" : "text-red-600"}`} />
                       <span className={`text-xs font-semibold ${card.trendUp ? "text-green-600" : "text-red-600"}`}>
@@ -352,7 +433,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <item.icon className={`w-5 h-5 ${item.color}`} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider truncate">{item.label}</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">{item.label}</p>
                       <p className={`text-lg font-bold ${item.color} tracking-tight`}>{item.value}</p>
                     </div>
                   </CardContent>
@@ -363,7 +444,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Revenue Trend */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-base font-bold text-neutral-800">Revenue vs Collected</h3>
@@ -372,7 +453,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#10b981] inline-block rounded" />Collected</span>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3">Daily trend over selected period</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Daily trend over selected period</p>
                   <LineChart
                     xAxis={[{
                       data: dashboardData.revenueTrend.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -397,7 +478,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Delivery Performance */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-base font-bold text-neutral-800">Delivered vs Failed</h3>
@@ -406,7 +487,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <span className="flex items-center gap-1"><span className="w-3 h-3 bg-[#ef4444] inline-block rounded-sm" />Failed</span>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3">Daily delivery outcomes over selected period</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Daily delivery outcomes over selected period</p>
                   <BarChart
                     xAxis={[{
                       data: dashboardData.deliveryPerformance.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -433,9 +514,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
               {/* Parcel Pipeline */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-4">Parcel Pipeline</h3>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Parcel Pipeline</h3>
                   <div className="space-y-2.5">
                     {[
                       { label: "Registered", icon: Package, color: "text-gray-600", bg: "bg-gray-100", bar: "bg-gray-400" },
@@ -456,11 +537,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                           <div className={`w-7 h-7 ${stage.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
                             <stage.icon className={`w-3.5 h-3.5 ${stage.color}`} />
                           </div>
-                          <span className="text-xs font-medium text-gray-600 w-36 flex-shrink-0">{stage.label}</span>
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-36 flex-shrink-0">{stage.label}</span>
                           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div className={`${stage.bar} h-2 rounded-full transition-all duration-1000`} style={{ width: `${pct}%` }} />
                           </div>
-                          <span className="text-xs font-bold text-neutral-700 w-8 text-right">{count}</span>
+                          <span className="text-xs font-bold text-neutral-700 dark:text-gray-300 w-8 text-right">{count}</span>
                         </div>
                       );
                     })}
@@ -469,22 +550,22 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Station Performance Table */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-4">Station Snapshot</h3>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Station Snapshot</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-gray-100">
+                        <tr className="border-b border-gray-100 dark:border-gray-700">
                           <th className="pb-2 text-left text-xs font-semibold text-gray-500 uppercase">Station</th>
                           <th className="pb-2 text-right text-xs font-semibold text-gray-500 uppercase">Parcels</th>
                           <th className="pb-2 text-right text-xs font-semibold text-gray-500 uppercase">Revenue</th>
                           <th className="pb-2 text-right text-xs font-semibold text-gray-500 uppercase">Rate</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                         {dashboardData.stationPerformance.map((s, i) => (
-                          <tr key={s.stationId} className="hover:bg-gray-50 transition-colors">
+                          <tr key={s.stationId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                             <td className="py-2.5">
                               <div className="flex items-center gap-2">
                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
@@ -492,10 +573,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                                   i === 1 ? "bg-gray-100 text-gray-600" :
                                   i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
                                 }`}>{i + 1}</div>
-                                <span className="text-sm font-medium text-neutral-800">{s.stationName}</span>
+                                <span className="text-sm font-medium text-neutral-800 dark:text-gray-200">{s.stationName}</span>
                               </div>
                             </td>
-                            <td className="py-2.5 text-right text-sm text-neutral-700">{s.parcels}</td>
+                            <td className="py-2.5 text-right text-sm text-neutral-700 dark:text-gray-300">{s.parcels}</td>
                             <td className="py-2.5 text-right text-sm font-semibold text-[#ea690c]">{formatCurrency(s.revenue)}</td>
                             <td className="py-2.5 text-right">
                               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -516,9 +597,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
               {/* POD vs Non-POD */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-4">Revenue by Type</h3>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Revenue by Type</h3>
                   <PieChart
                     series={[{
                       data: dashboardData.revenueBreakdown.byType.map((item, i) => ({
@@ -548,9 +629,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Payment Methods */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-4">Payment Methods</h3>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Payment Methods</h3>
                   <PieChart
                     series={[{
                       data: dashboardData.revenueBreakdown.byPayment.map((item, i) => ({
@@ -580,9 +661,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Top 3 Riders */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-4">Top Riders</h3>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Top Riders</h3>
                   <div className="space-y-3">
                     {dashboardData.riderPerformance.slice(0, 3).map((rider, i) => (
                       <div key={rider.riderId} className="flex items-center gap-3">
@@ -665,7 +746,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             </div>
 
             {/* Revenue vs Collected — full width detailed chart */}
-            <Card className="border border-gray-200 bg-white shadow-sm">
+            <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-1">
                   <div>
@@ -706,12 +787,12 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
               {/* Station Revenue — all stations: stacked bars | single station: detail panel */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
                   {selectedOfficeId === "all" ? (
                     <>
-                      <h3 className="text-base font-bold text-neutral-800 mb-1">Revenue by Station</h3>
-                      <p className="text-xs text-gray-400 mb-4">Collected vs outstanding per station</p>
+                      <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Revenue by Station</h3>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Collected vs outstanding per station</p>
                       <div className="space-y-4">
                         {dashboardData.stationPerformance.map((s, i) => {
                           const collectedPct = Math.round((s.revenue * (0.7 + i * 0.04)) / s.revenue * 100);
@@ -753,8 +834,8 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                     </>
                   ) : (
                     <>
-                      <h3 className="text-base font-bold text-neutral-800 mb-1">{selectedOfficeName} — Station Detail</h3>
-                      <p className="text-xs text-gray-400 mb-4">Performance breakdown for this station</p>
+                      <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">{selectedOfficeName} — Station Detail</h3>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Performance breakdown for this station</p>
                       <div className="grid grid-cols-2 gap-3 mb-5">
                         {[
                           { label: "Total Parcels", value: dashboardData.kpis.totalParcels.toLocaleString(), color: "text-blue-600", bg: "bg-blue-50" },
@@ -809,7 +890,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Payment Method Trend */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-1">
                     <div>
@@ -848,10 +929,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
               {/* POD vs Non-POD */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Revenue by Type</h3>
-                  <p className="text-xs text-gray-400 mb-3">POD vs Non-POD split</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Revenue by Type</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">POD vs Non-POD split</p>
                   <PieChart
                     series={[{
                       data: dashboardData.revenueBreakdown.byType.map((item, i) => ({
@@ -884,10 +965,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Payment Method Split */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Payment Methods</h3>
-                  <p className="text-xs text-gray-400 mb-3">Cash vs MoMo vs Other</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Payment Methods</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Cash vs MoMo vs Other</p>
                   <PieChart
                     series={[{
                       data: dashboardData.revenueBreakdown.byPayment.map((item, i) => ({
@@ -920,10 +1001,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Revenue by Day of Week */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Revenue by Day of Week</h3>
-                  <p className="text-xs text-gray-400 mb-4">Average daily revenue pattern</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Revenue by Day of Week</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Average daily revenue pattern</p>
                   {(() => {
                     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
                     const dayRevenue = days.map((day, i) => ({
@@ -981,7 +1062,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <item.icon className={`w-5 h-5 ${item.color}`} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wider truncate">{item.label}</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">{item.label}</p>
                       <p className={`text-lg font-bold ${item.color} tracking-tight`}>{item.value}</p>
                     </div>
                   </CardContent>
@@ -991,7 +1072,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
 
             {/* Delivered vs Failed chart + Parcel Pipeline */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-base font-bold text-neutral-800">Delivered vs Failed</h3>
@@ -1000,7 +1081,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-[#ef4444] rounded-sm inline-block" />Failed</span>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3">Daily outcomes over selected period</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Daily outcomes over selected period</p>
                   <BarChart
                     xAxis={[{
                       data: dashboardData.deliveryPerformance.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -1021,10 +1102,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
               </Card>
 
               {/* Parcel Pipeline */}
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Parcel Pipeline</h3>
-                  <p className="text-xs text-gray-400 mb-4">Current status distribution across all stages</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Parcel Pipeline</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Current status distribution across all stages</p>
                   <div className="space-y-3">
                     {[
                       { label: "Registered", icon: Package, color: "text-gray-600", bg: "bg-gray-100", bar: "bg-gray-400" },
@@ -1045,11 +1126,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                           <div className={`w-7 h-7 ${stage.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
                             <stage.icon className={`w-3.5 h-3.5 ${stage.color}`} />
                           </div>
-                          <span className="text-xs font-medium text-gray-600 w-36 flex-shrink-0">{stage.label}</span>
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-36 flex-shrink-0">{stage.label}</span>
                           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div className={`${stage.bar} h-2 rounded-full transition-all duration-1000`} style={{ width: `${pct}%` }} />
                           </div>
-                          <span className="text-xs font-bold text-neutral-700 w-8 text-right">{count}</span>
+                          <span className="text-xs font-bold text-neutral-700 dark:text-gray-300 w-8 text-right">{count}</span>
                           <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
                         </div>
                       );
@@ -1061,10 +1142,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
 
             {/* Success Rate + Avg Delivery Time trends */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Success Rate Trend</h3>
-                  <p className="text-xs text-gray-400 mb-3">Daily delivery success rate over selected period</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Success Rate Trend</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Daily delivery success rate over selected period</p>
                   <LineChart
                     xAxis={[{
                       data: dashboardData.deliveryPerformance.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -1090,10 +1171,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                 </CardContent>
               </Card>
 
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Avg Delivery Time</h3>
-                  <p className="text-xs text-gray-400 mb-3">Hours from assignment to delivery</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Avg Delivery Time</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Hours from assignment to delivery</p>
                   <LineChart
                     xAxis={[{
                       data: dashboardData.deliveryPerformance.map((d) => new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })),
@@ -1124,10 +1205,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
 
             {/* Station comparison — only when all stations selected */}
             {selectedOfficeId === "all" && (
-              <Card className="border border-gray-200 bg-white shadow-sm">
+              <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
                 <CardContent className="p-6">
-                  <h3 className="text-base font-bold text-neutral-800 mb-1">Station Comparison</h3>
-                  <p className="text-xs text-gray-400 mb-4">Parcels handled and delivery rate per station</p>
+                  <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Station Comparison</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Parcels handled and delivery rate per station</p>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <BarChart
                       xAxis={[{ data: dashboardData.stationPerformance.map((s) => s.stationName.split(" ")[0]), scaleType: "band" }]}
@@ -1179,7 +1260,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
           <div className="space-y-6 animate-fade-in">
 
             {/* Station Earnings by Period */}
-            <Card className="border border-gray-200 bg-white shadow-sm">
+            <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -1229,7 +1310,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             </Card>
 
             {/* Rider Leaderboard */}
-            <Card className="border border-gray-200 bg-white shadow-sm">
+            <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold text-neutral-800">Rider Leaderboard</h3>
@@ -1285,9 +1366,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             </Card>
 
             {/* Rider Deliveries Chart */}
-            <Card className="border border-gray-200 bg-white shadow-sm">
+            <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
               <CardContent className="p-6">
-                <h3 className="text-base font-bold text-neutral-800 mb-4">Rider Deliveries Comparison</h3>
+                <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-4">Rider Deliveries Comparison</h3>
                 <div className="flex items-center gap-4 text-xs mb-2">
                   <span className="flex items-center gap-1"><span className="w-3 h-3 bg-[#3b82f6] rounded-sm inline-block" />Delivered</span>
                   <span className="flex items-center gap-1"><span className="w-3 h-3 bg-[#ef4444] rounded-sm inline-block" />Failed</span>

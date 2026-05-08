@@ -89,6 +89,10 @@ module.exports = {
           "0%": { backgroundPosition: "-1000px 0" },
           "100%": { backgroundPosition: "1000px 0" },
         },
+        float: {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-20px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -96,6 +100,7 @@ module.exports = {
         "fade-in": "fadeIn 0.5s ease-in-out both",
         "slide-up": "slideUp 0.5s ease-out both",
         "shimmer": "shimmer 2s infinite linear",
+        "float": "float 6s ease-in-out infinite",
       },
     },
     container: { center: true, padding: "2rem", screens: { "2xl": "1400px" } },

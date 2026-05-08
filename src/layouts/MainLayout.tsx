@@ -13,14 +13,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
             <UpdateNotificationPopup />
             <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
             <div className="flex flex-1 flex-col min-w-0 ml-0 lg:ml-64">
-                <div className="sticky top-0 z-10 flex-shrink-0 bg-white shadow-sm">
+                <div className="sticky top-0 z-10 flex-shrink-0 bg-white dark:bg-gray-900 shadow-sm">
                     <Navbar onMenuClick={toggleSidebar} />
                 </div>
-                <main className="flex-1 bg-gray-50">
+                <main className="flex-1 bg-gray-50 dark:bg-gray-950">
                     {children}
                 </main>
             </div>

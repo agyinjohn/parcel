@@ -39,6 +39,7 @@ export const Login = (): JSX.Element => {
     if (isAuthenticated && userRole) {
       console.log("User is authenticated with role:", userRole);
 
+      // Small delay to ensure state is properly updated
       const timer = setTimeout(() => {
         if (userRole === "ADMIN") {
           console.log("Redirecting to admin dashboard");
@@ -57,21 +58,28 @@ export const Login = (): JSX.Element => {
     }
   }, [isAuthenticated, userRole, navigate]);
 
+  // Normalize phone number for backend: add +233 if user didn't include it
   const normalizePhoneForBackend = (input: string): string => {
     const trimmed = input.trim().replace(/\s|-/g, "");
     if (!trimmed) return trimmed;
+    // Remove leading 0 (e.g., 0531656697 -> 531656697)
     let digits = trimmed.startsWith("0") ? trimmed.slice(1) : trimmed;
+    // Remove + if present for easier handling
     if (digits.startsWith("+")) digits = digits.slice(1);
+    // If already starts with 233, add + prefix
     if (digits.startsWith("233")) return `+${digits}`;
+    // Otherwise prepend +233
     return `+233${digits}`;
   };
 
+  // Validate phone number format
   const validatePhone = (phone: string): boolean => {
     const cleaned = phone.trim().replace(/\s|-/g, "");
     const ghanaPattern = /^(0\d{9}|\d{9}|\+233\d{9})$/;
     return ghanaPattern.test(cleaned);
   };
 
+  // Format phone number with dashes as user types
   const formatPhoneInput = (value: string): string => {
     const cleaned = value.replace(/\D/g, "");
     if (cleaned.length === 0) return "";
@@ -86,6 +94,7 @@ export const Login = (): JSX.Element => {
     }
   };
 
+  // Handle phone input change
   const handlePhoneChange = (value: string) => {
     const formatted = formatPhoneInput(value);
     setPhoneNumber(formatted);
@@ -97,6 +106,7 @@ export const Login = (): JSX.Element => {
     }
   };
 
+  // Detect Caps Lock
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.getModifierState && e.getModifierState("CapsLock")) {
       setCapsLockOn(true);
@@ -136,7 +146,9 @@ export const Login = (): JSX.Element => {
 
       if (response.data) {
         const userData = response.data.user;
+        // Normalize role - handle both old and new role formats and backend variants
         let normalizedRole = userData.role?.toUpperCase() || "FRONTDESK";
+        // Map old role names to new ones
         if (["STATION-MANAGER", "STATION_MANAGER", "STATION MANAGER"].includes(normalizedRole)) {
           normalizedRole = "MANAGER";
         }
@@ -149,15 +161,17 @@ export const Login = (): JSX.Element => {
 
         console.log("Setting user with role:", normalizedRole);
 
+        // Set user in context
         setUser({
           id: userData.id,
           name: userData.name,
           email: userData.email,
           role: normalizedRole as any,
-          stationId: userData.stationId,
-          office: userData.office,
+          stationId: userData.stationId, // Will be undefined for admin
+          office: userData.office, // Include office information from login response
         });
 
+        // Set station only if user has a stationId (not admin)
         if (userData.stationId) {
           setStation({
             id: userData.stationId,
@@ -165,14 +179,16 @@ export const Login = (): JSX.Element => {
             location: "Location",
           });
         } else {
+          // Admin user - no station
           setStation(null);
         }
-
+        // Store remember me preference
         if (rememberMe) {
           localStorage.setItem("rememberMe", "true");
           localStorage.setItem("rememberedPhone", phoneNumber);
         }
 
+        // Redirect based on role - do it directly instead of waiting for context update
         console.log("Redirecting with role:", normalizedRole);
         setTimeout(() => {
           console.log("Navigating based on role:", normalizedRole);
@@ -196,6 +212,14 @@ export const Login = (): JSX.Element => {
     }
   };
 
+  const handleDemoCallerLogin = () => {
+    // Pure UI demo: no auth, no token, no context changes.
+    // This route is not protected, so it will always load.
+    setError("");
+    navigate("/call-center-demo", { replace: true });
+  };
+
+  // Load remembered credentials
   useEffect(() => {
     const rememberMe = localStorage.getItem("rememberMe") === "true";
     if (rememberMe) {
@@ -209,8 +233,9 @@ export const Login = (): JSX.Element => {
 
   return (
     <div className="min-h-screen w-full flex">
-      {/* LEFT SIDE - Brand Hero (Desktop Only) */}
+      {/* LEFT SIDE - Brand Hero */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#ea690c] via-orange-600 to-orange-700 relative overflow-hidden">
+        {/* Animated background pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-10 animate-float" style={{ animationDelay: '0s' }}>
             <PackageIcon className="w-32 h-32 text-white" />
@@ -229,6 +254,7 @@ export const Login = (): JSX.Element => {
           </div>
         </div>
 
+        {/* Content */}
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-6">
@@ -252,6 +278,7 @@ export const Login = (): JSX.Element => {
               Manage parcels, track deliveries, and streamline operations with our comprehensive delivery management platform.
             </p>
 
+            {/* Feature pills */}
             <div className="flex flex-wrap gap-3 pt-4">
               {[
                 { icon: CheckCircle2, label: "Real-time Tracking" },
@@ -266,10 +293,11 @@ export const Login = (): JSX.Element => {
             </div>
           </div>
 
+          {/* Bottom stats */}
           <div className="absolute bottom-12 left-16 right-16 grid grid-cols-3 gap-8">
             {[
               { value: "10K+", label: "Parcels Delivered" },
-              { value: "10+", label: "Active Stations" },
+              { value: "4", label: "Active Stations" },
               { value: "99%", label: "Success Rate" },
             ].map((s) => (
               <div key={s.label} className="text-center">
@@ -282,25 +310,28 @@ export const Login = (): JSX.Element => {
       </div>
 
       {/* RIGHT SIDE - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gray-50">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2">
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg p-1.5">
               <img src="/logo-1.png" alt="M&M Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-neutral-800">Mealex & Mailex</h1>
+              <h1 className="text-xl font-bold text-neutral-800">Mealex & Mailex</h1>
               <p className="text-sm text-gray-500">Parcel Delivery System</p>
             </div>
           </div>
+
           <Card className="border-0 shadow-xl bg-white rounded-2xl overflow-hidden">
             <CardContent className="p-8">
+              {/* Header */}
               <div className="mb-8">
                 <h2 className="text-2xl font-bold text-neutral-800 mb-2">Welcome Back!</h2>
                 <p className="text-gray-500">Sign in to access your dashboard</p>
               </div>
 
+              {/* Error Message */}
               {error && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 animate-fade-in">
                   <AlertCircleIcon className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -308,7 +339,9 @@ export const Login = (): JSX.Element => {
                 </div>
               )}
 
+              {/* Login Form */}
               <form onSubmit={handleLogin} className="space-y-5">
+                {/* Phone Field */}
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-sm font-semibold text-neutral-800">
                     Phone Number
@@ -346,6 +379,7 @@ export const Login = (): JSX.Element => {
                   )}
                 </div>
 
+                {/* Password Field */}
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-sm font-semibold text-neutral-800">
                     Password
@@ -385,6 +419,7 @@ export const Login = (): JSX.Element => {
                   )}
                 </div>
 
+                {/* Remember Me & Forgot Password */}
                 <div className="flex items-center justify-between pt-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <input
@@ -403,6 +438,7 @@ export const Login = (): JSX.Element => {
                   </Link>
                 </div>
 
+                {/* Login Button */}
                 <Button
                   type="submit"
                   disabled={loading}
@@ -422,6 +458,7 @@ export const Login = (): JSX.Element => {
                 </Button>
               </form>
 
+              {/* Footer */}
               <div className="mt-8 pt-6 border-t border-gray-100 text-center">
                 <p className="text-xs text-gray-400">
                   Version 1.0.0 · Secure API Integration

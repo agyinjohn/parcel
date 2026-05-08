@@ -14,6 +14,8 @@ import {
   Edit2Icon,
   PrinterIcon,
   PackageIcon,
+  RefreshCwIcon,
+  AlertTriangleIcon,
 } from "lucide-react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -73,7 +75,7 @@ interface Station {
 export const ParcelTransfer = (): JSX.Element => {
   const { showToast } = useToast();
   const { currentUser } = useStation();
-  const { stations: cachedStations, loading: loadingStations } = useLocation();
+  const { stations: cachedStations, loading: loadingStations, refreshLocations, error: stationsError } = useLocation();
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<ParcelTransferFormState>({
@@ -111,10 +113,10 @@ export const ParcelTransfer = (): JSX.Element => {
       : cachedStations;
   })();
 
-  // Fetch stations on mount
+  // Fetch stations on mount - trigger load if not already loaded
   useEffect(() => {
-    // Stations are now loaded from LocationContext cache
-    // No need to fetch again
+    // If stations fail to load after all retries, show the error message with retry button
+    // The LocationContext handles automatic retries silently in the background
   }, []);
 
   // Auto-save draft to localStorage
@@ -613,21 +615,6 @@ export const ParcelTransfer = (): JSX.Element => {
 
   return (
     <div className="w-full">
-      {/* Loading Modal */}
-      {loadingStations && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] p-6 max-w-sm w-full mx-4">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-[#ea690c] border-t-transparent rounded-full animate-spin" />
-              <div className="text-center">
-                <p className="text-lg font-semibold text-neutral-800 mb-1">Loading Stations</p>
-                <p className="text-sm text-gray-600">Please wait while we fetch available stations...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {/* Header */}
         <div className="flex flex-col gap-3">
@@ -719,9 +706,36 @@ export const ParcelTransfer = (): JSX.Element => {
 
               {/* Station information */}
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-neutral-800">
-                  Station Information
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-neutral-800">
+                    Station Information
+                  </h2>
+                  {loadingStations && (
+                    <div className="flex items-center gap-2 text-xs text-[#ea690c]">
+                      <div className="h-3 w-3 border-2 border-[#ea690c] border-t-transparent rounded-full animate-spin" />
+                      <span>Loading stations...</span>
+                    </div>
+                  )}
+                </div>
+                {!loadingStations && stationsError && stations.length === 0 && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 mb-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangleIcon className="h-4 w-4 text-red-600 flex-shrink-0" />
+                        <p className="text-xs text-red-800">
+                          Failed to load stations. Please try again.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => refreshLocations()}
+                        className="flex items-center gap-1.5 bg-red-600 text-white hover:bg-red-700 text-xs px-3 py-1.5 h-auto flex-shrink-0"
+                      >
+                        <RefreshCwIcon className="h-3.5 w-3.5" />
+                        Retry
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-neutral-800">
                     Destination Station <span className="text-[#e22420]">*</span>

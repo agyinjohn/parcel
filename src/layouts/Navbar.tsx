@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Menu, BellIcon, SettingsIcon, ChevronDownIcon, HelpCircleIcon, LogOut } from "lucide-react";
+import { Menu, BellIcon, SettingsIcon, ChevronDownIcon, HelpCircleIcon, LogOut, Moon, Sun } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useStation } from "../contexts/StationContext";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface NavbarProps {
     onMenuClick: () => void;
@@ -131,6 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { currentUser, logout } = useStation();
+    const { theme, toggleTheme } = useTheme();
     const [showAccountMenu, setShowAccountMenu] = useState(false);
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -167,28 +169,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
     return (
         <>
-        <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] bg-white">
+        <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] dark:border-gray-700 bg-white dark:bg-gray-900">
             <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Left Section - Menu and Title */}
                 <div className="flex items-center gap-4 flex-1">
                     <button
                         onClick={onMenuClick}
-                        className="rounded-lg p-2 text-[#5d5d5d] hover:bg-gray-100 transition-colors lg:hidden"
+                        className="rounded-lg p-2 text-[#5d5d5d] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden"
                     >
                         <Menu size={24} />
                     </button>
 
                     <div className="hidden sm:flex flex-col items-start gap-0.5">
-                        <h1 className="text-lg font-bold text-neutral-800">
+                        <h1 className="text-lg font-bold text-neutral-800 dark:text-gray-100">
                             {routeInfo.title}
                         </h1>
-                        <p className="text-xs text-[#5d5d5d]">
+                        <p className="text-xs text-[#5d5d5d] dark:text-gray-400">
                             {routeInfo.description}
                         </p>
                     </div>
 
                     <div className="flex sm:hidden flex-col items-start gap-0.5">
-                        <h1 className="text-base font-bold text-neutral-800">
+                        <h1 className="text-base font-bold text-neutral-800 dark:text-gray-100">
                             {routeInfo.title}
                         </h1>
                     </div>
@@ -196,6 +198,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
                 {/* Right Section - Icons and Account */}
                 <div className="flex items-center gap-1 sm:gap-2 lg:gap-4">
+                    {/* Dark Mode Toggle - Temporarily Disabled */}
+                    {/* <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleTheme}
+                        className="h-10 w-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {theme === 'dark' ? (
+                            <Sun className="h-5 w-5 text-yellow-500" />
+                        ) : (
+                            <Moon className="h-5 w-5 text-[#5d5d5d]" />
+                        )}
+                    </Button> */}
+
                     {/* Notifications */}
                     <Button
                         variant="ghost"
@@ -214,13 +231,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-10 w-10 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="h-10 w-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     >
-                        <SettingsIcon className="h-5 w-5 text-[#5d5d5d]" />
+                        <SettingsIcon className="h-5 w-5 text-[#5d5d5d] dark:text-gray-300" />
                     </Button>
 
                     {/* Divider */}
-                    <div className="hidden sm:block w-px h-6 bg-[#d1d1d1] mx-1 lg:mx-2" />
+                    <div className="hidden sm:block w-px h-6 bg-[#d1d1d1] dark:bg-gray-700 mx-1 lg:mx-2" />
 
                     {/* Account Menu */}
                     {currentUser && (
@@ -239,10 +256,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                 </Avatar>
 
                                 <div className="hidden md:flex flex-col items-start gap-0.5">
-                                    <div className="font-medium text-sm text-neutral-800">
+                                    <div className="font-medium text-sm text-neutral-800 dark:text-gray-100">
                                         {currentUser.name}
                                     </div>
-                                    <div className="text-xs text-[#5d5d5d]">
+                                    <div className="text-xs text-[#5d5d5d] dark:text-gray-400">
                                         {currentUser.office?.name || getRoleLabel(currentUser.role)}
                                     </div>
                                 </div>
@@ -273,9 +290,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
                             {/* Account Dropdown Menu */}
                             {showAccountMenu && (
-                                <div className="absolute right-0 top-full mt-3 w-72 rounded-xl border border-[#d1d1d1] bg-white shadow-xl z-50">
+                                <div className="absolute right-0 top-full mt-3 w-72 rounded-xl border border-[#d1d1d1] dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl z-50">
                                     {/* Header */}
-                                    <div className="p-4 border-b border-[#d1d1d1] bg-gray-50 rounded-t-xl">
+                                    <div className="p-4 border-b border-[#d1d1d1] dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-t-xl">
                                         <div className="flex items-center gap-3">
                                             <Avatar className="h-11 w-11 border border-solid border-[#d1d1d1]">
                                                 <AvatarImage src="/vector.svg" alt={currentUser.name} />
@@ -289,10 +306,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="flex flex-col">
-                                                <div className="font-semibold text-neutral-800 text-sm">
+                                                <div className="font-semibold text-neutral-800 dark:text-gray-100 text-sm">
                                                     {currentUser.name}
                                                 </div>
-                                                <div className="text-xs text-[#5d5d5d]">
+                                                <div className="text-xs text-[#5d5d5d] dark:text-gray-400">
                                                     {currentUser.office?.name || getRoleLabel(currentUser.role)}
                                                 </div>
                                             </div>
@@ -301,7 +318,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
                                     {/* Menu Items */}
                                     <div className="p-2">
-                                        <div className="font-semibold text-neutral-800 text-xs px-3 py-2 mb-1 uppercase tracking-wide text-[#5d5d5d]">
+                                        <div className="font-semibold text-neutral-800 dark:text-gray-300 text-xs px-3 py-2 mb-1 uppercase tracking-wide text-[#5d5d5d] dark:text-gray-400">
                                             My Account
                                         </div>
                                         {accountMenuItems.map((item, index) => {
@@ -316,7 +333,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                     }}
                                                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
                                                             ? "bg-[#ea690c] text-white shadow-sm"
-                                                            : "text-neutral-700 hover:bg-gray-50"
+                                                            : "text-neutral-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                                                         }`}
                                                 >
                                                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-[#5d5d5d]"}`} />
@@ -332,13 +349,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                     </div>
 
                                     {/* Logout */}
-                                    <div className="border-t border-[#d1d1d1] p-2">
+                                    <div className="border-t border-[#d1d1d1] dark:border-gray-700 p-2">
                                         <button
                                             onClick={() => {
                                                 setShowAccountMenu(false);
                                                 setShowLogoutConfirm(true);
                                             }}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e22420] hover:bg-red-50 transition-colors"
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e22420] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                         >
                                             <LogOut className="w-4 h-4" />
                                             <span className="text-sm font-medium text-left">
@@ -357,13 +374,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
             {/* Logout Confirm Modal */}
             {showLogoutConfirm && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] w-full max-w-sm p-6">
-                        <h3 className="text-base font-bold text-neutral-800 mb-1">Confirm Logout</h3>
-                        <p className="text-sm text-[#5d5d5d] mb-5">Are you sure you want to log out?</p>
+                    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-[#d1d1d1] dark:border-gray-700 w-full max-w-sm p-6">
+                        <h3 className="text-base font-bold text-neutral-800 dark:text-gray-100 mb-1">Confirm Logout</h3>
+                        <p className="text-sm text-[#5d5d5d] dark:text-gray-400 mb-5">Are you sure you want to log out?</p>
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowLogoutConfirm(false)}
-                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] text-sm font-medium text-neutral-700 hover:bg-gray-50 transition-colors"
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] dark:border-gray-700 text-sm font-medium text-neutral-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                             >
                                 Cancel
                             </button>

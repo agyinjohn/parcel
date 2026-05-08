@@ -6,6 +6,7 @@ import { ParcelProvider } from "./contexts/ParcelContext";
 import { FrontdeskParcelProvider } from "./contexts/FrontdeskParcelContext";
 import { ShelfProvider } from "./contexts/ShelfContext";
 import { ToastProvider } from "./components/ui/toast";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { MainLayout } from "./layouts/MainLayout";
 import { RiderLayout } from "./layouts/RiderLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -56,7 +57,8 @@ import AdminStatistics from "./screens/Admin/AdminStatistics";
 export const App = (): JSX.Element => {
   // Some environments cache component prop types aggressively; this keeps routing flexible.
   return (
-    <StationProvider>
+    <ThemeProvider>
+      <StationProvider>
       <LocationProvider>
         <UserProvider>
           <ParcelProvider>
@@ -478,6 +480,7 @@ export const App = (): JSX.Element => {
         </UserProvider>
       </LocationProvider>
     </StationProvider>
+    </ThemeProvider>
   );
 };
 

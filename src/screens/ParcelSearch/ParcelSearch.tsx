@@ -324,7 +324,7 @@ export const ParcelSearch = (): JSX.Element => {
                     </div> */}
 
                     {/* Quick Search Bar */}
-                    <Card className="border border-[#d1d1d1] bg-white">
+                    <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                         <CardContent className="p-3 sm:p-4">
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <div className="flex-1 relative">
@@ -359,7 +359,7 @@ export const ParcelSearch = (): JSX.Element => {
 
                             {/* Advanced Filters */}
                             {showFilters && (
-                                <div className="mt-4 pt-4 border-t border-[#d1d1d1]">
+                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {/* Phone Number Filter */}
                                         <div>
@@ -392,7 +392,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                         status: e.target.value,
                                                     }))
                                                 }
-                                                className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                             >
                                                 <option value="">All Status</option>
                                                 <option value="registered">Registered</option>
@@ -415,7 +415,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                         shelfLocation: e.target.value,
                                                     }))
                                                 }
-                                                className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                             >
                                                 <option value="">All Shelves</option>
                                                 {uniqueShelves.map((shelf) => (
@@ -497,7 +497,7 @@ export const ParcelSearch = (): JSX.Element => {
                     {loading ? (
                         <div className="text-center py-8">
                             <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                            <p className="text-sm text-neutral-700">Loading parcels...</p>
+                            <p className="text-sm text-neutral-700 dark:text-gray-300">Loading parcels...</p>
                         </div>
                     ) : (
                         <>
@@ -519,7 +519,7 @@ export const ParcelSearch = (): JSX.Element => {
                                             const newSize = parseInt(e.target.value);
                                             loadParcelsIfNeeded({}, 0, newSize, true);
                                         }}
-                                        className="text-xs border border-[#d1d1d1] rounded px-2 py-1"
+                                        className="text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded px-2 py-1"
                                     >
                                         <option value={1000}>1000</option>
                                         <option value={2000}>2000</option>
@@ -533,30 +533,30 @@ export const ParcelSearch = (): JSX.Element => {
                                 <CardContent className="p-0">
                                     <div className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
                                         <table className="w-full divide-y divide-[#d1d1d1] text-xs">
-                                            <thead className="bg-gray-50 sticky top-0 z-10">
+                                            <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
                                                 <tr>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Recipient
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Phone
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Address
                                                     </th>
 
                                                     {/* NEW: Date column */}
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Date
                                                     </th>
 
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Status
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Shelf
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Driver
                                                     </th>
                                                     <th className="py-2 px-2 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
@@ -564,7 +564,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                     </th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                                 {filteredParcels.length === 0 ? (
                                                     <tr>
                                                         {/* UPDATED colSpan to account for Date column */}
@@ -592,30 +592,30 @@ export const ParcelSearch = (): JSX.Element => {
                                                         return (
                                                             <tr
                                                                 key={parcel.parcelId}
-                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} align-middle`}
+                                                                className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-800/50'} align-middle`}
                                                             >
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div>
-                                                                        <p className="font-medium text-neutral-800 text-xs">{parcel.receiverName || "N/A"}</p>
+                                                                        <p className="font-medium text-neutral-800 dark:text-gray-200 text-xs">{parcel.receiverName || "N/A"}</p>
                                                                         {parcel.senderName && (
                                                                             <p className="text-[#5d5d5d] text-[10px] mt-0.5">From: {parcel.senderName}</p>
                                                                         )}
                                                                     </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <div className="text-neutral-700 text-xs">
+                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs">
                                                                         {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
                                                                     </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2">
-                                                                    <div className="text-neutral-700 text-xs max-w-[180px] truncate">
+                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs max-w-[180px] truncate">
                                                                         {parcel.receiverAddress || "—"}
                                                                     </div>
                                                                 </td>
 
                                                                 {/* NEW: createdAt/date cell */}
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <div className="text-neutral-700 text-xs">
+                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs">
                                                                         {parcel.createdAt ? new Date(parcel.createdAt).toLocaleString() : "—"}
                                                                     </div>
                                                                 </td>
@@ -626,13 +626,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <span className="text-neutral-700 text-xs">{parcel.shelfName || parcel.shelfNumber || "—"}</span>
+                                                                    <span className="text-neutral-700 dark:text-gray-300 text-xs">{parcel.shelfName || parcel.shelfNumber || "—"}</span>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div className="text-xs">
                                                                         {parcel.driverName ? (
                                                                             <>
-                                                                                <p className="text-neutral-800 font-medium text-xs">{parcel.driverName}</p>
+                                                                                <p className="text-neutral-800 dark:text-gray-200 font-medium text-xs">{parcel.driverName}</p>
                                                                                 {parcel.driverPhoneNumber && (
                                                                                     <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.driverPhoneNumber)}</p>
                                                                                 )}
@@ -647,7 +647,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                                         {/* NEW: show rider info if present */}
                                                                         {parcel.riderInfo && (
                                                                             <div className="mt-1">
-                                                                                <p className="text-neutral-800 font-medium text-xs">Rider: {parcel.riderInfo.riderName}</p>
+                                                                                <p className="text-neutral-800 dark:text-gray-200 font-medium text-xs">Rider: {parcel.riderInfo.riderName}</p>
                                                                                 {parcel.riderInfo.riderPhoneNumber && (
                                                                                     <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}</p>
                                                                                 )}
@@ -683,7 +683,7 @@ export const ParcelSearch = (): JSX.Element => {
 
                             {/* Pagination */}
                             {pagination.totalPages > 1 && (
-                                <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-[#d1d1d1] sm:px-6">
+                                <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sm:px-6">
                                     <div className="flex flex-1 justify-between sm:hidden">
                                         <Button
                                             onClick={() => {
@@ -710,7 +710,7 @@ export const ParcelSearch = (): JSX.Element => {
                                     </div>
                                     <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                                         <div>
-                                            <p className="text-sm text-neutral-700">
+                                            <p className="text-sm text-neutral-700 dark:text-gray-300">
                                                 Showing <span className="font-medium">{pagination.page * pagination.size + 1}</span> to{" "}
                                                 <span className="font-medium">
                                                     {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)}
@@ -759,16 +759,16 @@ export const ParcelSearch = (): JSX.Element => {
             {/* Shelf Update Modal */}
             {selectedParcel && editingShelf && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-lg">
+                    <Card className="w-full max-w-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-neutral-800">Update Shelf Location</h3>
+                                <h3 className="text-lg font-bold text-neutral-800 dark:text-gray-100">Update Shelf Location</h3>
                                 <button
                                     onClick={() => {
                                         setEditingShelf(false);
                                         setSelectedParcel(null);
                                     }}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
+                                    className="text-gray-400 dark:text-gray-500 hover:text-neutral-800 dark:hover:text-gray-200"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -791,7 +791,7 @@ export const ParcelSearch = (): JSX.Element => {
                                     <select
                                         value={newShelfLocation}
                                         onChange={(e) => setNewShelfLocation(e.target.value)}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     >
                                         <option value="">Select a shelf</option>
                                         {shelves.map((s) => (
@@ -830,13 +830,13 @@ export const ParcelSearch = (): JSX.Element => {
             {/* Parcel Details Modal */}
             {selectedParcel && !editingShelf && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-2xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
+                    <Card className="w-full max-w-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg max-h-[90vh] overflow-y-auto">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-neutral-800">Parcel Details</h3>
+                                <h3 className="text-lg font-bold text-neutral-800 dark:text-gray-100">Parcel Details</h3>
                                 <button
                                     onClick={() => setSelectedParcel(null)}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
+                                    className="text-gray-400 dark:text-gray-500 hover:text-neutral-800 dark:hover:text-gray-200"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -845,14 +845,14 @@ export const ParcelSearch = (): JSX.Element => {
                             <div className="space-y-6">
                                 {/* Basic Information */}
                                 <div>
-                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Basic Information</h4>
+                                    <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Basic Information</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <p className="text-xs text-[#5d5d5d] mb-1">Parcel ID</p>
-                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.parcelId}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Parcel ID</p>
+                                            <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.parcelId}</p>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-[#5d5d5d] mb-1">Status</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Status</p>
                                             <Badge className={
                                                 selectedParcel.delivered
                                                     ? "bg-green-100 text-green-800"
@@ -872,12 +872,12 @@ export const ParcelSearch = (): JSX.Element => {
                                             </Badge>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-[#5d5d5d] mb-1">Shelf Location</p>
-                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.shelfName || selectedParcel.shelfNumber || "Not set"}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Shelf Location</p>
+                                            <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.shelfName || selectedParcel.shelfNumber || "Not set"}</p>
                                         </div>
                                         {selectedParcel.fragile !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Fragile</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Fragile</p>
                                                 <Badge className={selectedParcel.fragile ? "bg-orange-100 text-orange-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.fragile ? "Yes" : "No"}
                                                 </Badge>
@@ -888,22 +888,22 @@ export const ParcelSearch = (): JSX.Element => {
 
                                 {/* Recipient Information */}
                                 <div>
-                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Recipient Information</h4>
+                                    <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Recipient Information</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <p className="text-xs text-[#5d5d5d] mb-1">Recipient Name</p>
-                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.receiverName || "N/A"}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Recipient Name</p>
+                                            <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.receiverName || "N/A"}</p>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-[#5d5d5d] mb-1">Phone Number</p>
-                                            <p className="font-semibold text-neutral-800 text-sm">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Phone Number</p>
+                                            <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
                                                 {selectedParcel.recieverPhoneNumber ? formatPhoneNumber(selectedParcel.recieverPhoneNumber) : "N/A"}
                                             </p>
                                         </div>
                                         {selectedParcel.receiverAddress && (
                                             <div className="col-span-2">
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Address</p>
-                                                <p className="text-sm text-neutral-700">{selectedParcel.receiverAddress}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Delivery Address</p>
+                                                <p className="text-sm text-neutral-700 dark:text-gray-300">{selectedParcel.receiverAddress}</p>
                                             </div>
                                         )}
                                     </div>
@@ -912,18 +912,18 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* Sender Information */}
                                 {(selectedParcel.senderName || selectedParcel.senderPhoneNumber) && (
                                     <div>
-                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Sender Information</h4>
+                                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Sender Information</h4>
                                         <div className="grid grid-cols-2 gap-4">
                                             {selectedParcel.senderName && (
                                                 <div>
-                                                    <p className="text-xs text-[#5d5d5d] mb-1">Sender Name</p>
-                                                    <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.senderName}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Sender Name</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.senderName}</p>
                                                 </div>
                                             )}
                                             {selectedParcel.senderPhoneNumber && (
                                                 <div>
-                                                    <p className="text-xs text-[#5d5d5d] mb-1">Sender Phone</p>
-                                                    <p className="font-semibold text-neutral-800 text-sm">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Sender Phone</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
                                                         {formatPhoneNumber(selectedParcel.senderPhoneNumber)}
                                                     </p>
                                                 </div>
@@ -935,24 +935,24 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* Driver Information */}
                                 {selectedParcel.driverName && (
                                     <div>
-                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Driver Information</h4>
+                                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Driver Information</h4>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Driver Name</p>
-                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.driverName}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Driver Name</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.driverName}</p>
                                             </div>
                                             {selectedParcel.driverPhoneNumber && (
                                                 <div>
-                                                    <p className="text-xs text-[#5d5d5d] mb-1">Driver Phone</p>
-                                                    <p className="font-semibold text-neutral-800 text-sm">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Driver Phone</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
                                                         {formatPhoneNumber(selectedParcel.driverPhoneNumber)}
                                                     </p>
                                                 </div>
                                             )}
                                             {selectedParcel.vehicleNumber && (
                                                 <div>
-                                                    <p className="text-xs text-[#5d5d5d] mb-1">Vehicle Number</p>
-                                                    <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.vehicleNumber}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Vehicle Number</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.vehicleNumber}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -962,16 +962,16 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* NEW: Rider Information */}
                                 {selectedParcel.riderInfo && (
                                     <div>
-                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Rider Information</h4>
+                                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Rider Information</h4>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Rider Name</p>
-                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.riderInfo.riderName}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rider Name</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.riderInfo.riderName}</p>
                                             </div>
                                             {selectedParcel.riderInfo.riderPhoneNumber && (
                                                 <div>
-                                                    <p className="text-xs text-[#5d5d5d] mb-1">Rider Phone</p>
-                                                    <p className="font-semibold text-neutral-800 text-sm">{formatPhoneNumber(selectedParcel.riderInfo.riderPhoneNumber)}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rider Phone</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{formatPhoneNumber(selectedParcel.riderInfo.riderPhoneNumber)}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -980,11 +980,11 @@ export const ParcelSearch = (): JSX.Element => {
 
                                 {/* Costs */}
                                 <div>
-                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Costs</h4>
+                                    <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Costs</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         {selectedParcel.pickUpCost !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Pick Up Cost</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Pick Up Cost</p>
                                                 <p className="font-semibold text-[#ea690c] text-sm">
                                                     GHC {selectedParcel.pickUpCost.toFixed(2)}
                                                 </p>
@@ -992,7 +992,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.deliveryCost !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Cost</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Delivery Cost</p>
                                                 <p className="font-semibold text-[#ea690c] text-sm">
                                                     GHC {selectedParcel.deliveryCost.toFixed(2)}
                                                 </p>
@@ -1000,7 +1000,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.inboundCost !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Inbound Cost</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Inbound Cost</p>
                                                 <p className="font-semibold text-[#ea690c] text-sm">
                                                     GHC {selectedParcel.inboundCost.toFixed(2)}
                                                 </p>
@@ -1008,7 +1008,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.storageCost !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Storage Cost</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Storage Cost</p>
                                                 <p className="font-semibold text-[#ea690c] text-sm">
                                                     GHC {selectedParcel.storageCost.toFixed(2)}
                                                 </p>
@@ -1020,18 +1020,18 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* Item Description */}
                                 {selectedParcel.parcelDescription && (
                                     <div>
-                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Item Description</h4>
-                                        <p className="text-sm text-neutral-700">{selectedParcel.parcelDescription}</p>
+                                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Item Description</h4>
+                                        <p className="text-sm text-neutral-700 dark:text-gray-300">{selectedParcel.parcelDescription}</p>
                                     </div>
                                 )}
 
                                 {/* Additional Information */}
                                 <div>
-                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Additional Information</h4>
+                                    <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Additional Information</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         {selectedParcel.hasCalled !== undefined && selectedParcel.hasCalled !== null && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Has Called</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Has Called</p>
                                                 <Badge className={selectedParcel.hasCalled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.hasCalled ? "Yes" : "No"}
                                                 </Badge>
@@ -1039,7 +1039,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.inboudPayed !== undefined && selectedParcel.inboudPayed !== null && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Inbound Paid</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Inbound Paid</p>
                                                 <Badge className={selectedParcel.inboudPayed ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.inboudPayed ? "Yes" : "No"}
                                                 </Badge>
@@ -1047,7 +1047,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.homeDelivery !== undefined && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Home Delivery</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Home Delivery</p>
                                                 <Badge className={selectedParcel.homeDelivery ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.homeDelivery ? "Yes" : "No"}
                                                 </Badge>
@@ -1055,21 +1055,21 @@ export const ParcelSearch = (): JSX.Element => {
                                         )}
                                         {selectedParcel.registeredDate && (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Registered Date</p>
-                                                <p className="font-semibold text-neutral-800 text-sm">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Registered Date</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
                                                     {new Date(selectedParcel.registeredDate).toLocaleString()}
                                                 </p>
                                             </div>
                                         )}
                                         {typeof selectedParcel.officeId === 'string' ? (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Office ID</p>
-                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.officeId}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Office ID</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.officeId}</p>
                                             </div>
                                         ) : selectedParcel.officeId ? (
                                             <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Office</p>
-                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.officeId.name}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Office</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{selectedParcel.officeId.name}</p>
                                             </div>
                                         ) : null}
                                     </div>
@@ -1101,7 +1101,7 @@ export const ParcelSearch = (): JSX.Element => {
                                     )}
                                 </div>
 
-                                <div className="pt-4 border-t border-[#d1d1d1] flex gap-3">
+                                <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3">
                                     <Button
                                         onClick={() => {
                                             setEditingShelf(true);
