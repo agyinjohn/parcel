@@ -483,6 +483,28 @@ class FrontdeskService {
     }
 
     /**
+     * Remove parcel from home delivery list (set homeDelivery to false)
+     * Endpoint: PUT /parcel/:parcelId
+     */
+    async removeParcelAssignment(parcelId: string): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.put<ParcelResponse>(`/parcel/${parcelId}`, {
+                homeDelivery: false
+            });
+            return {
+                success: true,
+                message: 'Parcel removed from home delivery list successfully',
+            };
+        } catch (error: any) {
+            console.error('Remove parcel from home delivery error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to remove parcel from home delivery. Please try again.',
+            };
+        }
+    }
+
+    /**
      * Get rider assignments
      */
     async getRiderAssignments(riderId: string, payed?: boolean): Promise<ApiResponse> {
@@ -539,6 +561,36 @@ class FrontdeskService {
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve driver parcels. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Get active delivery for a specific parcel
+     * Endpoint: GET /parcel-assignment (filtered by parcelId)
+     */
+    async getActiveDeliveryForParcel(parcelId: string): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.get<any>(`/parcel-assignment?parcelId=${parcelId}`);
+            
+            // Find the active delivery assignment for this parcel
+            const assignments = response.data?.content || [];
+            const activeDelivery = assignments.find((a: any) => 
+                a.parcel?.parcelId === parcelId && 
+                ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'].includes(a.status)
+            );
+
+            return {
+                success: true,
+                message: 'Active delivery retrieved successfully',
+                data: activeDelivery || null,
+            };
+        } catch (error: any) {
+            console.error('Get active delivery error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve active delivery.',
+                data: null,
             };
         }
     }

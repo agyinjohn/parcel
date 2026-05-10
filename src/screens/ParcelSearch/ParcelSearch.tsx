@@ -41,9 +41,38 @@ export const ParcelSearch = (): JSX.Element => {
     const [editingShelf, setEditingShelf] = useState(false);
     const [newShelfLocation, setNewShelfLocation] = useState("");
     const [markPickupLoading, setMarkPickupLoading] = useState(false);
+    const [activeDelivery, setActiveDelivery] = useState<any>(null);
+    const [loadingDelivery, setLoadingDelivery] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
 
-    // NEW helper: determine human status label including pickup/hasCalled
+    // Fetch active delivery when parcel is selected
+    useEffect(() => {
+        const fetchActiveDelivery = async () => {
+            if (!selectedParcel || editingShelf) {
+                setActiveDelivery(null);
+                return;
+            }
+
+            setLoadingDelivery(true);
+            try {
+                const response = await frontdeskService.getActiveDeliveryForParcel(selectedParcel.parcelId);
+                if (response.success && response.data) {
+                    setActiveDelivery(response.data);
+                } else {
+                    setActiveDelivery(null);
+                }
+            } catch (error) {
+                console.error('Failed to fetch active delivery:', error);
+                setActiveDelivery(null);
+            } finally {
+                setLoadingDelivery(false);
+            }
+        };
+
+        fetchActiveDelivery();
+    }, [selectedParcel, editingShelf]);
+
+    // Helper: determine human status label including pickup/hasCalled
     const getStatusLabel = (p: ParcelResponse): string => {
         // Priority: Delivered > Picked Up > POD > Assigned > Called > Registered
         if (p.delivered) return "Delivered";
@@ -1076,6 +1105,98 @@ export const ParcelSearch = (): JSX.Element => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Active Delivery Information */}
+                                {loadingDelivery ? (
+                                    <div className="text-center py-4">
+                                        <Loader className="w-6 h-6 text-orange-500 mx-auto mb-2 animate-spin" />
+                                        <p className="text-xs text-gray-500">Loading delivery info...</p>
+                                    </div>
+                                ) : activeDelivery ? (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-gray-200 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">Active Delivery Assignment</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Delivery Status</p>
+                                                <Badge className={
+                                                    activeDelivery.status === 'DELIVERED'
+                                                        ? "bg-green-100 text-green-800"
+                                                        : activeDelivery.status === 'PICKED_UP'
+                                                            ? "bg-blue-100 text-blue-800"
+                                                            : activeDelivery.status === 'ACCEPTED'
+                                                                ? "bg-yellow-100 text-yellow-800"
+                                                                : "bg-orange-100 text-orange-800"
+                                                }>
+                                                    {activeDelivery.status || 'N/A'}
+                                                </Badge>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Payment Status</p>
+                                                <Badge className={activeDelivery.payed ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}>
+                                                    {activeDelivery.payed ? "Paid" : "Unpaid"}
+                                                </Badge>
+                                            </div>
+                                            {activeDelivery.riderInfo && (
+                                                <>
+                                                    <div>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rider Name</p>
+                                                        <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">{activeDelivery.riderInfo.riderName}</p>
+                                                    </div>
+                                                    {activeDelivery.riderInfo.riderPhoneNumber && (
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Rider Phone</p>
+                                                            <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
+                                                                {formatPhoneNumber(activeDelivery.riderInfo.riderPhoneNumber)}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                            <div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Amount</p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">
+                                                    GHC {(activeDelivery.amount || 0).toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Amount Paid</p>
+                                                <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
+                                                    GHC {(activeDelivery.amountPayed || 0).toFixed(2)}
+                                                </p>
+                                            </div>
+                                            {activeDelivery.assignedAt && (
+                                                <div>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Assigned At</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
+                                                        {new Date(activeDelivery.assignedAt).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {activeDelivery.completedAt && activeDelivery.completedAt > 0 && (
+                                                <div>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Completed At</p>
+                                                    <p className="font-semibold text-neutral-800 dark:text-gray-200 text-sm">
+                                                        {new Date(activeDelivery.completedAt).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {activeDelivery.parcels && activeDelivery.parcels.length > 1 && (
+                                                <div className="col-span-2">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Batch Delivery</p>
+                                                    <p className="text-sm text-neutral-700 dark:text-gray-300">
+                                                        This parcel is part of a batch with {activeDelivery.parcels.length} parcels
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {activeDelivery.returnReason && (
+                                                <div className="col-span-2">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Return Reason</p>
+                                                    <p className="text-sm text-red-600 dark:text-red-400">{activeDelivery.returnReason}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : null}
 
                                 {/* Costs */}
                                 <div>

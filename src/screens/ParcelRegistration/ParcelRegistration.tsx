@@ -389,9 +389,10 @@ import { InfoSection } from "./sections/InfoSection";
 import frontdeskService from "../../services/frontdeskService";
 import authService from "../../services/authService";
 import { useToast } from "../../components/ui/toast";
-import { Package } from "lucide-react";
+import { Package, InboxIcon, MapPinIcon as MapPin } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { PickupRequest } from "../PickupRequest/PickupRequest";
 
 interface ParcelFormData {
   driverName?: string;
@@ -443,6 +444,7 @@ export const ParcelRegistration = (): JSX.Element => {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'intake' | 'pickup'>('intake');
 
   // Save to localStorage whenever parcels or sessionDriver changes
   useEffect(() => {
@@ -670,6 +672,37 @@ export const ParcelRegistration = (): JSX.Element => {
   return (
     <div className="w-full">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+
+        {/* Tab Switcher */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('intake')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'intake'
+                ? 'bg-[#ea690c] text-white shadow-sm'
+                : 'bg-white border border-[#d1d1d1] text-neutral-700 hover:border-[#ea690c] hover:text-[#ea690c]'
+            }`}
+          >
+            <InboxIcon className="w-4 h-4" />
+            Parcel Intake
+          </button>
+          <button
+            onClick={() => setActiveTab('pickup')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'pickup'
+                ? 'bg-[#ea690c] text-white shadow-sm'
+                : 'bg-white border border-[#d1d1d1] text-neutral-700 hover:border-[#ea690c] hover:text-[#ea690c]'
+            }`}
+          >
+            <MapPin className="w-4 h-4" />
+            Pickup Request
+          </button>
+        </div>
+
+        {activeTab === 'pickup' ? (
+          <PickupRequest />
+        ) : (
+          <>
         {/* Session Banner - Only show if there's an active session */}
         {sessionDriver && parcels.length > 0 && (
           <Card className="mb-4 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100 ">
@@ -754,6 +787,8 @@ export const ParcelRegistration = (): JSX.Element => {
           }}
           isSaving={isSaving}
         />
+          </>
+        )}
       </div>
     </div>
   );

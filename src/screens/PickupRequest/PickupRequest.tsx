@@ -189,265 +189,203 @@ export const PickupRequest = (): JSX.Element => {
   };
 
   return (
-    <div className="w-full">
-      <div className="flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-          <CardContent className="p-4 sm:p-6 lg:p-8">
-            <div className="mb-6">
-              <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">
-                Pickup Request
-              </h1>
-              <p className="text-sm text-gray-600">
-                Request pickup of a parcel from one location for delivery to another. This is for parcels we need to collect, not ones already at our station.
-              </p>
+    <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+      <CardContent className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+
+          {/* Pickup & Delivery side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+            {/* Pickup Location */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                <MapPinIcon className="w-4 h-4 text-[#ea690c]" />
+                <h2 className="text-sm font-semibold text-neutral-800">Pickup Location</h2>
+              </div>
+              <div>
+                <Label htmlFor="pickupAddress" className="text-xs font-medium text-neutral-700">Address <span className="text-[#e22420]">*</span></Label>
+                <Input
+                  id="pickupAddress"
+                  placeholder="e.g. 123 Main Street, Accra"
+                  value={form.pickupAddress}
+                  onChange={(e) => updateField("pickupAddress", e.target.value)}
+                  className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="pickupContactName" className="text-xs font-medium text-neutral-700">Contact Name <span className="text-[#e22420]">*</span></Label>
+                  <Input
+                    id="pickupContactName"
+                    placeholder="Person at pickup"
+                    value={form.pickupContactName}
+                    onChange={(e) => updateField("pickupContactName", e.target.value)}
+                    className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pickupContactPhone" className="text-xs font-medium text-neutral-700">Phone <span className="text-[#e22420]">*</span></Label>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-xs pointer-events-none z-10">+233</span>
+                    <Input
+                      id="pickupContactPhone"
+                      type="tel"
+                      value={form.pickupContactPhone.startsWith("+233") ? form.pickupContactPhone.substring(4) : form.pickupContactPhone}
+                      onChange={(e) => updatePhoneField("pickupContactPhone", e.target.value)}
+                      placeholder="XXXXXXXXX"
+                      className="pl-12 border border-[#d1d1d1] h-9 text-sm"
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Pickup Location */}
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <MapPinIcon className="w-5 h-5 text-[#ea690c]" />
-                  <h2 className="text-lg font-semibold text-neutral-800">Pickup Location</h2>
-                </div>
-                <p className="text-sm text-gray-600 mb-4">Where should we pick up the parcel from?</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="sm:col-span-2 lg:col-span-4">
-                    <Label htmlFor="pickupAddress" className="text-neutral-800">Pickup Address *</Label>
-                    <Input
-                      id="pickupAddress"
-                      placeholder="e.g. 123 Main Street, Accra"
-                      value={form.pickupAddress}
-                      onChange={(e) => updateField("pickupAddress", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="pickupContactName" className="text-neutral-800">Contact Name at Pickup *</Label>
-                    <Input
-                      id="pickupContactName"
-                      placeholder="Person at pickup location"
-                      value={form.pickupContactName}
-                      onChange={(e) => updateField("pickupContactName", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div className="flex flex-col flex-1 items-start gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label
-                        htmlFor="pickupContactPhone"
-                        className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
-                      >
-                        Contact Phone number
-                      </Label>
-                      <span className="text-sm font-semibold text-[#e22420]">*</span>
-                    </div>
-                    <div className="relative w-full">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
-                        +233
-                      </span>
-                      <Input
-                        id="pickupContactPhone"
-                        type="tel"
-                        value={form.pickupContactPhone.startsWith("+233") ? form.pickupContactPhone.substring(4) : form.pickupContactPhone}
-                        onChange={(e) => updatePhoneField("pickupContactPhone", e.target.value)}
-                        placeholder="0XXXXXXXXX or XXXXXXXXX"
-                        className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
-                        maxLength={10}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <hr className="border-gray-200" />
-
-              {/* Delivery Location */}
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <TruckIcon className="w-5 h-5 text-[#ea690c]" />
-                  <h2 className="text-lg font-semibold text-neutral-800">Delivery Location</h2>
-                </div>
-                <p className="text-sm text-gray-600 mb-4">Where should we deliver the parcel to?</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="sm:col-span-2 lg:col-span-4">
-                    <Label htmlFor="deliveryAddress" className="text-neutral-800">Delivery Address *</Label>
-                    <Input
-                      id="deliveryAddress"
-                      placeholder="e.g. 45 Oak Avenue, Kumasi"
-                      value={form.deliveryAddress}
-                      onChange={(e) => updateField("deliveryAddress", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="recipientName" className="text-neutral-800">Recipient Name *</Label>
-                    <Input
-                      id="recipientName"
-                      placeholder="Person receiving the parcel"
-                      value={form.recipientName}
-                      onChange={(e) => updateField("recipientName", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div className="flex flex-col flex-1 items-start gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label
-                        htmlFor="recipientPhone"
-                        className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
-                      >
-                        Recipient Phone number
-                      </Label>
-                      <span className="text-sm font-semibold text-[#e22420]">*</span>
-                    </div>
-                    <div className="relative w-full">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
-                        +233
-                      </span>
-                      <Input
-                        id="recipientPhone"
-                        type="tel"
-                        value={form.recipientPhone.startsWith("+233") ? form.recipientPhone.substring(4) : form.recipientPhone}
-                        onChange={(e) => updatePhoneField("recipientPhone", e.target.value)}
-                        placeholder="0XXXXXXXXX or XXXXXXXXX"
-                        className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
-                        maxLength={10}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <hr className="border-gray-200" />
-
-              {/* Parcel Details */}
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <PackageIcon className="w-5 h-5 text-[#ea690c]" />
-                  <h2 className="text-lg font-semibold text-neutral-800">Parcel Details</h2>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="sm:col-span-2 lg:col-span-4">
-                    <Label htmlFor="parcelDescription" className="text-neutral-800">Parcel Description *</Label>
-                    <Input
-                      id="parcelDescription"
-                      placeholder="e.g. Documents, Electronics, Clothing"
-                      value={form.parcelDescription}
-                      onChange={(e) => updateField("parcelDescription", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="itemValue" className="text-neutral-800">Item Value (GHC)</Label>
-                    <CostInput
-                      id="itemValue"
-                      value={form.itemValue}
-                      onChange={(v) => updateField("itemValue", v)}
-                      placeholder="Optional"
-                      allowClear
-                      className="mt-1"
-                      inputClassName="border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="preferredPickupDate" className="text-neutral-800">Preferred Pickup Date</Label>
-                    <Input
-                      id="preferredPickupDate"
-                      type="date"
-                      value={form.preferredPickupDate}
-                      onChange={(e) => updateField("preferredPickupDate", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div className="sm:col-span-2 lg:col-span-4">
-                    <Label htmlFor="specialInstructions" className="text-neutral-800">Special Instructions</Label>
-                    <Textarea
-                      id="specialInstructions"
-                      placeholder="Any special handling, access instructions, etc."
-                      value={form.specialInstructions ?? ""}
-                      onChange={(e) => updateField("specialInstructions", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1] min-h-[80px]"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <hr className="border-gray-200" />
-
-              {/* Costs */}
-              <section>
-                <h2 className="text-lg font-semibold text-neutral-800 mb-2">Costs (Optional)</h2>
-                <p className="text-sm text-gray-600 mb-4">Leave blank if costs will be determined later.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <Label htmlFor="pickupCost" className="text-neutral-800">Pickup Cost (GHC)</Label>
-                    <CostInput
-                      id="pickupCost"
-                      value={form.pickupCost}
-                      onChange={(v) => updateField("pickupCost", v)}
-                      placeholder="Optional"
-                      allowClear
-                      className="mt-1"
-                      inputClassName="border border-[#d1d1d1]"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="deliveryCost" className="text-neutral-800">Delivery Cost (GHC)</Label>
-                    <CostInput
-                      id="deliveryCost"
-                      value={form.deliveryCost}
-                      onChange={(v) => updateField("deliveryCost", v)}
-                      placeholder="Optional"
-                      allowClear
-                      className="mt-1"
-                      inputClassName="border border-[#d1d1d1]"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* Success message */}
-              {submitSuccess && (
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircleIcon className="w-6 h-6 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-semibold text-green-800">Pickup request submitted</p>
-                    <p className="text-sm text-green-700">
-                      The request has been recorded. A rider will be assigned to collect the parcel from the pickup location and deliver it.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex flex-col sm:flex-row gap-3 justify-end pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleReset}
-                  className="border border-[#d1d1d1]"
-                >
-                  Reset Form
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader className="w-4 h-4 animate-spin mr-2" />
-                      Submitting...
-                    </>
-                  ) : (
-                    "Submit Pickup Request"
-                  )}
-                </Button>
+            {/* Delivery Location */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                <TruckIcon className="w-4 h-4 text-[#ea690c]" />
+                <h2 className="text-sm font-semibold text-neutral-800">Delivery Location</h2>
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+              <div>
+                <Label htmlFor="deliveryAddress" className="text-xs font-medium text-neutral-700">Address <span className="text-[#e22420]">*</span></Label>
+                <Input
+                  id="deliveryAddress"
+                  placeholder="e.g. 45 Oak Avenue, Kumasi"
+                  value={form.deliveryAddress}
+                  onChange={(e) => updateField("deliveryAddress", e.target.value)}
+                  className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="recipientName" className="text-xs font-medium text-neutral-700">Recipient Name <span className="text-[#e22420]">*</span></Label>
+                  <Input
+                    id="recipientName"
+                    placeholder="Person receiving"
+                    value={form.recipientName}
+                    onChange={(e) => updateField("recipientName", e.target.value)}
+                    className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="recipientPhone" className="text-xs font-medium text-neutral-700">Phone <span className="text-[#e22420]">*</span></Label>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-xs pointer-events-none z-10">+233</span>
+                    <Input
+                      id="recipientPhone"
+                      type="tel"
+                      value={form.recipientPhone.startsWith("+233") ? form.recipientPhone.substring(4) : form.recipientPhone}
+                      onChange={(e) => updatePhoneField("recipientPhone", e.target.value)}
+                      placeholder="XXXXXXXXX"
+                      className="pl-12 border border-[#d1d1d1] h-9 text-sm"
+                      maxLength={10}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr className="border-gray-200" />
+
+          {/* Parcel Details & Costs side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+            {/* Parcel Details */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                <PackageIcon className="w-4 h-4 text-[#ea690c]" />
+                <h2 className="text-sm font-semibold text-neutral-800">Parcel Details</h2>
+              </div>
+              <div>
+                <Label htmlFor="parcelDescription" className="text-xs font-medium text-neutral-700">Description <span className="text-[#e22420]">*</span></Label>
+                <Input
+                  id="parcelDescription"
+                  placeholder="e.g. Documents, Electronics, Clothing"
+                  value={form.parcelDescription}
+                  onChange={(e) => updateField("parcelDescription", e.target.value)}
+                  className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="itemValue" className="text-xs font-medium text-neutral-700">Item Value (GHC)</Label>
+                  <CostInput
+                    id="itemValue"
+                    value={form.itemValue}
+                    onChange={(v) => updateField("itemValue", v)}
+                    placeholder="Optional"
+                    allowClear
+                    className="mt-1"
+                    inputClassName="border border-[#d1d1d1] h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="preferredPickupDate" className="text-xs font-medium text-neutral-700">Preferred Date</Label>
+                  <Input
+                    id="preferredPickupDate"
+                    type="date"
+                    value={form.preferredPickupDate}
+                    onChange={(e) => updateField("preferredPickupDate", e.target.value)}
+                    className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="specialInstructions" className="text-xs font-medium text-neutral-700">Special Instructions</Label>
+                <Textarea
+                  id="specialInstructions"
+                  placeholder="Any special handling or access instructions"
+                  value={form.specialInstructions ?? ""}
+                  onChange={(e) => updateField("specialInstructions", e.target.value)}
+                  className="mt-1 border border-[#d1d1d1] text-sm min-h-[72px]"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            {/* Costs */}
+            <div className="space-y-3">
+              <div className="pb-2 border-b border-gray-200">
+                <h2 className="text-sm font-semibold text-neutral-800">Costs</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Leave blank if to be determined later</p>
+              </div>
+              <div>
+                <Label htmlFor="deliveryCost" className="text-xs font-medium text-neutral-700">Delivery Cost (GHC)</Label>
+                <CostInput
+                  id="deliveryCost"
+                  value={form.deliveryCost}
+                  onChange={(v) => updateField("deliveryCost", v)}
+                  placeholder="Optional"
+                  allowClear
+                  className="mt-1"
+                  inputClassName="border border-[#d1d1d1] h-9 text-sm"
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* Success message */}
+          {submitSuccess && (
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircleIcon className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <p className="text-sm text-green-800">Pickup request submitted. A rider will be assigned for collection.</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 justify-end pt-2">
+            <Button type="button" variant="outline" onClick={handleReset} className="border border-[#d1d1d1] h-9 text-sm">
+              Reset
+            </Button>
+            <Button type="submit" disabled={isSubmitting} className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 h-9 text-sm">
+              {isSubmitting ? <><Loader className="w-4 h-4 animate-spin mr-2" />Submitting...</> : "Submit Pickup Request"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 };

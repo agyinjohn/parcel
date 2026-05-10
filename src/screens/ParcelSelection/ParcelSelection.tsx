@@ -9,6 +9,7 @@ import {
     UserIcon,
     AlertCircleIcon,
     X,
+    Trash2Icon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -25,9 +26,11 @@ interface ParcelCardProps {
     parcel: ParcelResponse;
     isSelected: boolean;
     onToggle: () => void;
+    onRemove: () => void;
+    filterMode: 'ready' | 'assigned';
 }
 
-const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
+const ParcelCard = ({ parcel, isSelected, onToggle, onRemove, filterMode }: ParcelCardProps) => {
     let statusLabel = "Ready";
     let statusColor = "bg-green-100 text-green-800";
     if (parcel.delivered) {
@@ -72,7 +75,21 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                                 </span>
                             </div>
                         </div>
-                        <Badge className={statusColor}>{statusLabel}</Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge className={statusColor}>{statusLabel}</Badge>
+                            {filterMode === 'ready' && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRemove();
+                                    }}
+                                    className="p-1 rounded hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors"
+                                    title="Remove assignment"
+                                >
+                                    <Trash2Icon className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -161,6 +178,9 @@ export const ParcelSelection = (): JSX.Element => {
     const [selectedRider, setSelectedRider] = useState<string | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
     const [filterMode, setFilterMode] = useState<'ready' | 'assigned'>('ready');
+    const [removingParcel, setRemovingParcel] = useState<string | null>(null);
+    const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+    const [parcelToRemove, setParcelToRemove] = useState<string | null>(null);
 
     const filterParcelsByMode = (parcels: ParcelResponse[], mode: 'ready' | 'assigned') => {
         if (mode === 'assigned') {
@@ -226,6 +246,18 @@ export const ParcelSelection = (): JSX.Element => {
         }
     };
 
+    // Get unique rider IDs from selected parcels that already have assignments
+    const getAssignedRiderIds = (): Set<string> => {
+        const assignedRiderIds = new Set<string>();
+        selectedParcels.forEach(parcelId => {
+            const parcel = filteredParcels.find(p => p.parcelId === parcelId);
+            if (parcel?.riderInfo?.riderId) {
+                assignedRiderIds.add(parcel.riderInfo.riderId);
+            }
+        });
+        return assignedRiderIds;
+    };
+
     const fetchRiders = async () => {
         setLoadingRiders(true);
         try {
@@ -282,6 +314,46 @@ export const ParcelSelection = (): JSX.Element => {
             showToast("Failed to assign parcels. Please try again.", "error");
         } finally {
             setIsAssigning(false);
+        }
+    };
+
+    const confirmRemoveAssignment = (parcelId: string) => {
+        setParcelToRemove(parcelId);
+        setShowRemoveConfirm(true);
+    };
+
+    const handleRemoveAssignment = async () => {
+        if (!parcelToRemove) return;
+
+        setRemovingParcel(parcelToRemove);
+        setShowRemoveConfirm(false);
+
+        try {
+            const response = await frontdeskService.removeParcelAssignment(parcelToRemove);
+
+            if (response.success) {
+                showToast("Parcel assignment removed successfully", "success");
+
+                const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
+                if (refreshResponse.success && refreshResponse.data) {
+                    const parcels = Array.isArray(refreshResponse.data)
+                        ? refreshResponse.data as ParcelResponse[]
+                        : [];
+                    setAllParcels(parcels);
+                    setFilteredParcels(filterParcelsByMode(parcels, filterMode));
+                } else {
+                    setAllParcels([]);
+                    setFilteredParcels([]);
+                }
+            } else {
+                showToast(response.message || "Failed to remove assignment", "error");
+            }
+        } catch (error) {
+            console.error("Failed to remove assignment:", error);
+            showToast("Failed to remove assignment. Please try again.", "error");
+        } finally {
+            setRemovingParcel(null);
+            setParcelToRemove(null);
         }
     };
 
@@ -373,6 +445,8 @@ export const ParcelSelection = (): JSX.Element => {
                                     parcel={parcel}
                                     isSelected={selectedParcels.has(parcel.parcelId)}
                                     onToggle={() => toggleParcel(parcel.parcelId)}
+                                    onRemove={() => confirmRemoveAssignment(parcel.parcelId)}
+                                    filterMode={filterMode}
                                 />
                             ))}
                         </div>
@@ -389,6 +463,42 @@ export const ParcelSelection = (): JSX.Element => {
                     )}
                 </main>
             </div>
+
+            {showRemoveConfirm && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 rounded-full bg-red-100">
+                                    <AlertCircleIcon className="w-6 h-6 text-red-600" />
+                                </div>
+                                <h2 className="text-lg font-bold text-neutral-800">Remove Assignment</h2>
+                            </div>
+                            <p className="text-sm text-neutral-700 mb-6">
+                                Are you sure you want to remove this parcel assignment?
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <Button
+                                    onClick={() => {
+                                        setShowRemoveConfirm(false);
+                                        setParcelToRemove(null);
+                                    }}
+                                    variant="outline"
+                                    className="border border-[#d1d1d1]"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleRemoveAssignment}
+                                    className="bg-red-600 text-white hover:bg-red-700"
+                                >
+                                    Remove
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {showRiderModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -442,14 +552,19 @@ export const ParcelSelection = (): JSX.Element => {
                                             {riders.map((rider) => {
                                                 const isSelected = selectedRider === rider.userId;
                                                 const riderName = rider.name || rider.email || "Unknown";
+                                                const assignedRiderIds = getAssignedRiderIds();
+                                                const isDisabled = assignedRiderIds.has(rider.userId);
 
                                                 return (
                                                     <div
                                                         key={rider.userId}
-                                                        onClick={() => setSelectedRider(rider.userId)}
-                                                        className={`flex flex-col gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
-                                                            ? "border-[#ea690c] bg-orange-50"
-                                                            : "border-[#d1d1d1] bg-white hover:bg-gray-50"
+                                                        onClick={() => !isDisabled && setSelectedRider(rider.userId)}
+                                                        className={`flex flex-col gap-4 p-4 rounded-lg border transition-colors ${
+                                                            isDisabled
+                                                                ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+                                                                : isSelected
+                                                                    ? "border-[#ea690c] bg-orange-50 cursor-pointer"
+                                                                    : "border-[#d1d1d1] bg-white hover:bg-gray-50 cursor-pointer"
                                                             }`}
                                                     >
                                                         <div className="flex items-start justify-between">
@@ -471,6 +586,11 @@ export const ParcelSelection = (): JSX.Element => {
                                                                     {rider.phoneNumber && (
                                                                         <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-xs">
                                                                             {formatPhoneNumber(rider.phoneNumber)}
+                                                                        </span>
+                                                                    )}
+                                                                    {isDisabled && (
+                                                                        <span className="[font-family:'Lato',Helvetica] font-normal text-red-600 text-xs mt-1">
+                                                                            Already assigned
                                                                         </span>
                                                                     )}
                                                                 </div>

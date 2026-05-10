@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon, Fuel, TrendingUp } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon, Fuel, TrendingUp } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -24,7 +24,6 @@ const navItems = [
     // Station Manager, Front Desk & Call Center - Core Operations
     { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER",] },
     { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
-    { label: "Pickup Request", path: "/pickup-request", icon: MapPin, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
 
     // Call Center (CALLER)
@@ -69,14 +68,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                     }`}
             >
                 {/* Header with Logo - Fixed at top */}
-                <div className="flex h-auto flex-col items-center gap-3 border-b border-gray-200 dark:border-gray-800 p-6 text-center flex-shrink-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
-                    <div className="flex items-center justify-between w-full lg:justify-center">
-                        <div>
+                <div className="flex h-auto items-center gap-3 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex-shrink-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3">
                             <img
-                                className="h-[90px] w-[90px] object-cover rounded-2xl shadow-lg ring-2 ring-orange-100 dark:ring-orange-900/30"
+                                className="h-[40px] w-[40px] object-cover rounded-lg shadow-lg ring-2 ring-orange-100 dark:ring-orange-900/30"
                                 alt="M&M Logo"
                                 src="/logo-1.png"
                             />
+                            <div className="flex flex-col">
+                                <span className="font-bold text-sm bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent leading-tight">
+                                    Mealex & Mailex
+                                </span>
+                                <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    Parcel Delivery
+                                </span>
+                            </div>
                         </div>
                         <button
                             onClick={onToggle}
@@ -84,17 +91,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                         >
                             <X size={24} />
                         </button>
-                    </div>
-
-                    <div className="flex flex-col items-center gap-1">
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent">
-                                Mealex & Mailex
-                            </span>
-                        </div>
-                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Parcel Delivery System
-                        </div>
                     </div>
                 </div>
 
