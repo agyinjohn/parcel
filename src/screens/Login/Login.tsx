@@ -42,7 +42,7 @@ export const Login = (): JSX.Element => {
       const timer = setTimeout(() => {
         if (userRole === "ADMIN") {
           console.log("Redirecting to admin dashboard");
-          navigate("/admin/stations", { replace: true });
+          navigate("/admin/financial", { replace: true });
           return;
         } else if (userRole === "RIDER") {
           navigate("/rider/dashboard", { replace: true });
@@ -178,7 +178,7 @@ export const Login = (): JSX.Element => {
           console.log("Navigating based on role:", normalizedRole);
           if (normalizedRole === "ADMIN") {
             console.log("Navigate to admin dashboard");
-            navigate("/admin/stations", { replace: true });
+            navigate("/admin/dashboard", { replace: true });
           } else if (normalizedRole === "RIDER") {
             navigate("/rider/dashboard", { replace: true });
           } else if (normalizedRole === "CALLER") {
@@ -323,13 +323,12 @@ export const Login = (): JSX.Element => {
                       onChange={(e) => handlePhoneChange(e.target.value)}
                       disabled={loading}
                       required
-                      className={`pl-11 pr-11 h-12 w-full rounded-xl border-2 bg-white text-neutral-800 placeholder:text-gray-400 focus:ring-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                        phoneValid === true
+                      className={`pl-11 pr-11 h-12 w-full rounded-xl border-2 bg-white text-neutral-800 placeholder:text-gray-400 focus:ring-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${phoneValid === true
                           ? "border-green-400 focus:border-green-500 focus:ring-green-100"
                           : phoneValid === false
-                          ? "border-red-400 focus:border-red-500 focus:ring-red-100"
-                          : "border-gray-200 focus:border-[#ea690c] focus:ring-orange-100"
-                      }`}
+                            ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                            : "border-gray-200 focus:border-[#ea690c] focus:ring-orange-100"
+                        }`}
                     />
                     {phoneValid === true && (
                       <CheckCircle2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500 animate-fade-in" />

@@ -26,13 +26,7 @@ import { Button } from "../../../components/ui/button";
 import { useLocation } from "../../../contexts/LocationContext";
 import { formatCurrency } from "../../../utils/dataHelpers";
 import dummyDataGenerator from "../../../services/dummyDataGenerator";
-import type {
-  DashboardKPI,
-  RevenueDataPoint,
-  StationPerformance,
-  RiderPerformance,
-  StationEarningsPeriod,
-} from "../../../services/dummyDataGenerator";
+import type { StationEarningsPeriod } from "../../../services/dummyDataGenerator";
 import { RiderDetailModal } from "./RiderDetailModal";
 import { exportService } from "../../../services/exportService";
 
@@ -256,15 +250,15 @@ export const AdminFinancialDashboard = (): JSX.Element => {
       trend: "-0.3h",
       trendUp: true,
     },
-    {
-      label: "Customer Satisfaction",
-      value: `${dashboardData.kpis.customerSatisfaction}%`,
-      icon: Star,
-      color: "text-yellow-600",
-      bg: "bg-yellow-50",
-      trend: "+1.8%",
-      trendUp: true,
-    },
+    // {
+    //   label: "Customer Satisfaction",
+    //   value: `${dashboardData.kpis.customerSatisfaction}%`,
+    //   icon: Star,
+    //   color: "text-yellow-600",
+    //   bg: "bg-yellow-50",
+    //   trend: "+1.8%",
+    //   trendUp: true,
+    // },
   ];
 
   const tabs = [
@@ -280,10 +274,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 px-4 py-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1600px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-800 dark:text-gray-100 tracking-tight">Financial Analytics</h1>
+            {/* <h1 className="text-2xl font-bold text-neutral-800 dark:text-gray-100 tracking-tight">Financial Analytics</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               {selectedOfficeName} — Comprehensive performance insights
-            </p>
+            </p> */}
           </div>
           <div className="flex gap-2">
             <Button
@@ -404,11 +398,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${
-                activeTab === tab.key
-                  ? "bg-white text-[#ea690c] border-b-2 border-[#ea690c]"
-                  : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-              }`}
+              className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${activeTab === tab.key
+                ? "bg-white text-[#ea690c] border-b-2 border-[#ea690c]"
+                : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+                }`}
             >
               {tab.label}
             </button>
@@ -461,17 +454,17 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       tickLabelStyle: { fontSize: 11 },
                       tickMinStep: Math.ceil(dashboardData.revenueTrend.length / 7),
                     }]}
-                    yAxis={[{ valueFormatter: (v) => `GHC ${(v / 1000).toFixed(0)}k` }]}
+                    yAxis={[{ valueFormatter: (v: number) => `GHC ${(v / 1000).toFixed(0)}k` }]}
                     series={[
-                      { data: dashboardData.revenueTrend.map((d) => d.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                      { data: dashboardData.revenueTrend.map((d) => d.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
+                      { data: dashboardData.revenueTrend.map((d) => d.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                      { data: dashboardData.revenueTrend.map((d) => d.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
                     ]}
                     height={260}
                     margin={{ top: 10, right: 10, bottom: 30, left: 65 }}
-                    slotProps={{ legend: { hidden: true } }}
                     sx={{
                       '& .MuiAreaElement-root': { fillOpacity: 0.12 },
                       '& .MuiLineElement-root': { strokeWidth: 2.5 },
+                      '& .MuiChartsLegend-root': { display: 'none' },
                     }}
                   />
                 </CardContent>
@@ -501,9 +494,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                     ]}
                     height={260}
                     margin={{ top: 10, right: 10, bottom: 30, left: 45 }}
-                    slotProps={{ legend: { hidden: true } }}
                     sx={{
                       '& .MuiBarElement-root': { rx: 4, transition: 'opacity 0.2s', '&:hover': { opacity: 0.8 } },
+                      '& .MuiChartsLegend-root': { display: 'none' },
                     }}
                   />
                 </CardContent>
@@ -568,21 +561,19 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                           <tr key={s.stationId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                             <td className="py-2.5">
                               <div className="flex items-center gap-2">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                  i === 0 ? "bg-yellow-100 text-yellow-700" :
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-yellow-100 text-yellow-700" :
                                   i === 1 ? "bg-gray-100 text-gray-600" :
-                                  i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
-                                }`}>{i + 1}</div>
+                                    i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
+                                  }`}>{i + 1}</div>
                                 <span className="text-sm font-medium text-neutral-800 dark:text-gray-200">{s.stationName}</span>
                               </div>
                             </td>
                             <td className="py-2.5 text-right text-sm text-neutral-700 dark:text-gray-300">{s.parcels}</td>
                             <td className="py-2.5 text-right text-sm font-semibold text-[#ea690c]">{formatCurrency(s.revenue)}</td>
                             <td className="py-2.5 text-right">
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                s.deliveryRate >= 90 ? "bg-green-100 text-green-700" :
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.deliveryRate >= 90 ? "bg-green-100 text-green-700" :
                                 s.deliveryRate >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"
-                              }`}>{s.deliveryRate}%</span>
+                                }`}>{s.deliveryRate}%</span>
                             </td>
                           </tr>
                         ))}
@@ -608,11 +599,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                         color: ["#ea690c", "#3b82f6"][i],
                       })),
                       innerRadius: 45, outerRadius: 75, paddingAngle: 2, cornerRadius: 4,
-                      highlightScope: { faded: "global", highlighted: "item" },
+                      highlightScope: { fade: "global", highlight: "item" },
                       faded: { innerRadius: 35, additionalRadius: -10, color: "gray" },
                     }]}
                     height={200}
-                    slotProps={{ legend: { hidden: true } }}
+                    sx={{ '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                   <div className="space-y-2 mt-2">
                     {dashboardData.revenueBreakdown.byType.map((item, i) => (
@@ -640,11 +631,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                         color: ["#10b981", "#8b5cf6", "#6b7280"][i],
                       })),
                       innerRadius: 45, outerRadius: 75, paddingAngle: 2, cornerRadius: 4,
-                      highlightScope: { faded: "global", highlighted: "item" },
+                      highlightScope: { fade: "global", highlight: "item" },
                       faded: { innerRadius: 35, additionalRadius: -10, color: "gray" },
                     }]}
                     height={200}
-                    slotProps={{ legend: { hidden: true } }}
+                    sx={{ '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                   <div className="space-y-2 mt-2">
                     {dashboardData.revenueBreakdown.byPayment.map((item, i) => (
@@ -667,10 +658,9 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                   <div className="space-y-3">
                     {dashboardData.riderPerformance.slice(0, 3).map((rider, i) => (
                       <div key={rider.riderId} className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                          i === 0 ? "bg-yellow-100 text-yellow-700" :
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${i === 0 ? "bg-yellow-100 text-yellow-700" :
                           i === 1 ? "bg-gray-100 text-gray-600" : "bg-orange-100 text-orange-600"
-                        }`}>{i + 1}</div>
+                          }`}>{i + 1}</div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-neutral-800 truncate">{rider.riderName}</p>
                           <p className="text-xs text-gray-500">{rider.deliveries} deliveries</p>
@@ -766,18 +756,18 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                     tickLabelStyle: { fontSize: 11 },
                     tickMinStep: Math.ceil(dashboardData.revenueTrend.length / 8),
                   }]}
-                  yAxis={[{ valueFormatter: (v) => `GHC ${(v / 1000).toFixed(0)}k` }]}
+                  yAxis={[{ valueFormatter: (v: number) => `GHC ${(v / 1000).toFixed(0)}k` }]}
                   series={[
-                    { data: dashboardData.revenueTrend.map((d) => d.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                    { data: dashboardData.revenueTrend.map((d) => d.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                    { data: dashboardData.revenueTrend.map((d) => d.outstanding), label: "Outstanding", color: "#ef4444", curve: "catmullRom", showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
+                    { data: dashboardData.revenueTrend.map((d) => d.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                    { data: dashboardData.revenueTrend.map((d) => d.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                    { data: dashboardData.revenueTrend.map((d) => d.outstanding), label: "Outstanding", color: "#ef4444", curve: "catmullRom", showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
                   ]}
                   height={300}
                   margin={{ top: 10, right: 10, bottom: 30, left: 70 }}
-                  slotProps={{ legend: { hidden: true } }}
                   sx={{
                     '& .MuiAreaElement-root': { fillOpacity: 0.1 },
                     '& .MuiLineElement-root': { strokeWidth: 2.5 },
+                    '& .MuiChartsLegend-root': { display: 'none' },
                   }}
                 />
               </CardContent>
@@ -803,11 +793,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                             <div key={s.stationId}>
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2">
-                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                    i === 0 ? "bg-yellow-100 text-yellow-700" :
+                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? "bg-yellow-100 text-yellow-700" :
                                     i === 1 ? "bg-gray-100 text-gray-600" :
-                                    i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
-                                  }`}>{i + 1}</div>
+                                      i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
+                                    }`}>{i + 1}</div>
                                   <span className="text-sm font-semibold text-neutral-800">{s.stationName}</span>
                                 </div>
                                 <span className="text-sm font-bold text-[#ea690c]">{formatCurrency(s.revenue)}</span>
@@ -873,11 +862,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <div className="space-y-2">
                         {dashboardData.riderPerformance.slice(0, 4).map((r, i) => (
                           <div key={r.riderId} className="flex items-center gap-3">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                              i === 0 ? "bg-yellow-100 text-yellow-700" :
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${i === 0 ? "bg-yellow-100 text-yellow-700" :
                               i === 1 ? "bg-gray-100 text-gray-600" :
-                              i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
-                            }`}>{i + 1}</div>
+                                i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
+                              }`}>{i + 1}</div>
                             <span className="text-sm font-medium text-neutral-800 flex-1 truncate">{r.riderName}</span>
                             <span className="text-xs text-gray-500">{r.deliveries} deliveries</span>
                             <span className="text-sm font-bold text-[#ea690c]">{formatCurrency(r.revenue)}</span>
@@ -910,16 +898,15 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       tickLabelStyle: { fontSize: 10 },
                       tickMinStep: Math.ceil(dashboardData.paymentTrend.length / 7),
                     }]}
-                    yAxis={[{ valueFormatter: (v) => `GHC ${(v / 1000).toFixed(0)}k` }]}
+                    yAxis={[{ valueFormatter: (v: number) => `GHC ${(v / 1000).toFixed(0)}k` }]}
                     series={[
-                      { data: dashboardData.paymentTrend.map((d) => d.cash), label: "Cash", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                      { data: dashboardData.paymentTrend.map((d) => d.momo), label: "MoMo", color: "#8b5cf6", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                      { data: dashboardData.paymentTrend.map((d) => d.other), label: "Other", color: "#6b7280", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
+                      { data: dashboardData.paymentTrend.map((d) => d.cash), label: "Cash", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                      { data: dashboardData.paymentTrend.map((d) => d.momo), label: "MoMo", color: "#8b5cf6", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                      { data: dashboardData.paymentTrend.map((d) => d.other), label: "Other", color: "#6b7280", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
                     ]}
                     height={280}
                     margin={{ top: 10, right: 10, bottom: 30, left: 65 }}
-                    slotProps={{ legend: { hidden: true } }}
-                    sx={{ '& .MuiAreaElement-root': { fillOpacity: 0.1 }, '& .MuiLineElement-root': { strokeWidth: 2 } }}
+                    sx={{ '& .MuiAreaElement-root': { fillOpacity: 0.1 }, '& .MuiLineElement-root': { strokeWidth: 2 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                 </CardContent>
               </Card>
@@ -941,11 +928,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                         color: ["#ea690c", "#3b82f6"][i],
                       })),
                       innerRadius: 50, outerRadius: 80, paddingAngle: 3, cornerRadius: 5,
-                      highlightScope: { faded: "global", highlighted: "item" },
+                      highlightScope: { fade: "global", highlight: "item" },
                       faded: { innerRadius: 40, additionalRadius: -10, color: "gray" },
                     }]}
                     height={190}
-                    slotProps={{ legend: { hidden: true } }}
+                    sx={{ '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                   <div className="space-y-2.5 mt-1">
                     {dashboardData.revenueBreakdown.byType.map((item, i) => (
@@ -977,11 +964,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                         color: ["#10b981", "#8b5cf6", "#6b7280"][i],
                       })),
                       innerRadius: 50, outerRadius: 80, paddingAngle: 3, cornerRadius: 5,
-                      highlightScope: { faded: "global", highlighted: "item" },
+                      highlightScope: { fade: "global", highlight: "item" },
                       faded: { innerRadius: 40, additionalRadius: -10, color: "gray" },
                     }]}
                     height={190}
-                    slotProps={{ legend: { hidden: true } }}
+                    sx={{ '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                   <div className="space-y-2.5 mt-1">
                     {dashboardData.revenueBreakdown.byPayment.map((item, i) => (
@@ -1090,13 +1077,12 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       tickMinStep: Math.ceil(dashboardData.deliveryPerformance.length / 7),
                     }]}
                     series={[
-                      { data: dashboardData.deliveryPerformance.map((d) => d.delivered), label: "Delivered", color: "#3b82f6", stack: "total", valueFormatter: (v) => `${v} parcels` },
-                      { data: dashboardData.deliveryPerformance.map((d) => d.failed), label: "Failed", color: "#ef4444", stack: "total", valueFormatter: (v) => `${v} parcels` },
+                      { data: dashboardData.deliveryPerformance.map((d) => d.delivered), label: "Delivered", color: "#3b82f6", stack: "total", valueFormatter: (v: number | null) => `${v} parcels` },
+                      { data: dashboardData.deliveryPerformance.map((d) => d.failed), label: "Failed", color: "#ef4444", stack: "total", valueFormatter: (v: number | null) => `${v} parcels` },
                     ]}
                     height={280}
                     margin={{ top: 10, right: 10, bottom: 30, left: 45 }}
-                    slotProps={{ legend: { hidden: true } }}
-                    sx={{ "& .MuiBarElement-root": { rx: 3 } }}
+                    sx={{ "& .MuiBarElement-root": { rx: 3 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                 </CardContent>
               </Card>
@@ -1153,7 +1139,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       tickLabelStyle: { fontSize: 10 },
                       tickMinStep: Math.ceil(dashboardData.deliveryPerformance.length / 7),
                     }]}
-                    yAxis={[{ min: 70, max: 100, valueFormatter: (v) => `${v}%` }]}
+                    yAxis={[{ min: 70, max: 100, valueFormatter: (v: number) => `${v}%` }]}
                     series={[{
                       data: dashboardData.deliveryPerformance.map((d) => d.successRate),
                       label: "Success Rate",
@@ -1161,12 +1147,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       curve: "catmullRom",
                       area: true,
                       showMark: false,
-                      valueFormatter: (v) => `${v}%`,
+                      valueFormatter: (v: number | null) => `${v}%`,
                     }]}
                     height={260}
                     margin={{ top: 10, right: 10, bottom: 30, left: 50 }}
-                    slotProps={{ legend: { hidden: true } }}
-                    sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.12 }, "& .MuiLineElement-root": { strokeWidth: 2.5 } }}
+                    sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.12 }, "& .MuiLineElement-root": { strokeWidth: 2.5 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                 </CardContent>
               </Card>
@@ -1182,7 +1167,7 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       tickLabelStyle: { fontSize: 10 },
                       tickMinStep: Math.ceil(dashboardData.deliveryPerformance.length / 7),
                     }]}
-                    yAxis={[{ valueFormatter: (v) => `${v}h` }]}
+                    yAxis={[{ valueFormatter: (v: number) => `${v}h` }]}
                     series={[{
                       data: dashboardData.deliveryPerformance.map(() =>
                         Math.round((1.5 + Math.random() * 2.5) * 10) / 10
@@ -1192,12 +1177,11 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       curve: "catmullRom",
                       area: true,
                       showMark: false,
-                      valueFormatter: (v) => `${v}h`,
+                      valueFormatter: (v: number | null) => `${v}h`,
                     }]}
                     height={260}
                     margin={{ top: 10, right: 10, bottom: 30, left: 50 }}
-                    slotProps={{ legend: { hidden: true } }}
-                    sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.12 }, "& .MuiLineElement-root": { strokeWidth: 2.5 } }}
+                    sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.12 }, "& .MuiLineElement-root": { strokeWidth: 2.5 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                   />
                 </CardContent>
               </Card>
@@ -1216,29 +1200,26 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                         data: dashboardData.stationPerformance.map((s) => s.parcels),
                         label: "Parcels",
                         color: "#6366f1",
-                        valueFormatter: (v) => `${v} parcels`,
+                        valueFormatter: (v: number | null) => `${v} parcels`,
                       }]}
                       height={240}
                       margin={{ top: 10, right: 10, bottom: 30, left: 50 }}
-                      slotProps={{ legend: { hidden: true } }}
-                      sx={{ "& .MuiBarElement-root": { rx: 4 } }}
+                      sx={{ "& .MuiBarElement-root": { rx: 4 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                     />
                     <div className="space-y-3 self-center">
                       {dashboardData.stationPerformance.map((s, i) => (
                         <div key={s.stationId}>
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center gap-2">
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                i === 0 ? "bg-yellow-100 text-yellow-700" :
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? "bg-yellow-100 text-yellow-700" :
                                 i === 1 ? "bg-gray-100 text-gray-600" :
-                                i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
-                              }`}>{i + 1}</div>
+                                  i === 2 ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
+                                }`}>{i + 1}</div>
                               <span className="text-sm font-semibold text-neutral-800">{s.stationName}</span>
                             </div>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              s.deliveryRate >= 90 ? "bg-green-100 text-green-700" :
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.deliveryRate >= 90 ? "bg-green-100 text-green-700" :
                               s.deliveryRate >= 80 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"
-                            }`}>{s.deliveryRate}% rate</span>
+                              }`}>{s.deliveryRate}% rate</span>
                           </div>
                           <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div
@@ -1272,9 +1253,8 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                       <button
                         key={p}
                         onClick={() => setEarningsPeriod(p)}
-                        className={`px-3 py-1 text-xs font-semibold rounded-md capitalize transition-colors ${
-                          earningsPeriod === p ? "bg-white text-[#ea690c] shadow-sm" : "text-gray-500 hover:text-gray-700"
-                        }`}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md capitalize transition-colors ${earningsPeriod === p ? "bg-white text-[#ea690c] shadow-sm" : "text-gray-500 hover:text-gray-700"
+                          }`}
                       >
                         {p === "day" ? "Daily" : p === "week" ? "Weekly" : p === "month" ? "Monthly" : "Yearly"}
                       </button>
@@ -1289,15 +1269,14 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                 </div>
                 <LineChart
                   xAxis={[{ data: dashboardData.stationEarnings.map((e) => e.periodLabel), scaleType: "point", tickLabelStyle: { fontSize: 10 }, tickMinStep: Math.ceil(dashboardData.stationEarnings.length / 8) }]}
-                  yAxis={[{ valueFormatter: (v) => `GHC ${(v / 1000).toFixed(0)}k` }]}
+                  yAxis={[{ valueFormatter: (v: number) => `GHC ${(v / 1000).toFixed(0)}k` }]}
                   series={[
-                    { data: dashboardData.stationEarnings.map((e) => e.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
-                    { data: dashboardData.stationEarnings.map((e) => e.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v) => `GHC ${v?.toLocaleString()}` },
+                    { data: dashboardData.stationEarnings.map((e) => e.revenue), label: "Revenue", color: "#ea690c", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
+                    { data: dashboardData.stationEarnings.map((e) => e.collected), label: "Collected", color: "#10b981", curve: "catmullRom", area: true, showMark: false, valueFormatter: (v: number | null) => `GHC ${v?.toLocaleString()}` },
                   ]}
                   height={220}
                   margin={{ top: 10, right: 10, bottom: 30, left: 65 }}
-                  slotProps={{ legend: { hidden: true } }}
-                  sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.1 }, "& .MuiLineElement-root": { strokeWidth: 2.5 } }}
+                  sx={{ "& .MuiAreaElement-root": { fillOpacity: 0.1 }, "& .MuiLineElement-root": { strokeWidth: 2.5 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                 />
 
                 {/* Period rows with per-rider drill-down */}
@@ -1333,11 +1312,10 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                           onClick={() => setSelectedRider({ id: rider.riderId, name: rider.riderName })}
                         >
                           <td className="px-4 py-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                              index === 0 ? "bg-yellow-100 text-yellow-800" :
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${index === 0 ? "bg-yellow-100 text-yellow-800" :
                               index === 1 ? "bg-gray-100 text-gray-800" :
-                              index === 2 ? "bg-orange-100 text-orange-800" : "bg-blue-50 text-blue-600"
-                            }`}>{index + 1}</div>
+                                index === 2 ? "bg-orange-100 text-orange-800" : "bg-blue-50 text-blue-600"
+                              }`}>{index + 1}</div>
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-sm font-semibold text-neutral-800">{rider.riderName}</div>
@@ -1376,13 +1354,12 @@ export const AdminFinancialDashboard = (): JSX.Element => {
                 <BarChart
                   xAxis={[{ data: dashboardData.riderPerformance.map((r) => r.riderName.split(" ")[0]), scaleType: "band" }]}
                   series={[
-                    { data: dashboardData.riderPerformance.map((r) => r.deliveries), label: "Deliveries", color: "#3b82f6", valueFormatter: (v) => `${v} parcels` },
-                    { data: dashboardData.riderPerformance.map((r) => r.failed), label: "Failed", color: "#ef4444", valueFormatter: (v) => `${v} parcels` },
+                    { data: dashboardData.riderPerformance.map((r) => r.deliveries), label: "Deliveries", color: "#3b82f6", valueFormatter: (v: number | null) => `${v} parcels` },
+                    { data: dashboardData.riderPerformance.map((r) => r.failed), label: "Failed", color: "#ef4444", valueFormatter: (v: number | null) => `${v} parcels` },
                   ]}
                   height={320}
                   margin={{ top: 10, right: 10, bottom: 60, left: 50 }}
-                  slotProps={{ legend: { hidden: true } }}
-                  sx={{ "& .MuiBarElement-root": { rx: 4 } }}
+                  sx={{ "& .MuiBarElement-root": { rx: 4 }, '& .MuiChartsLegend-root': { display: 'none' } }}
                 />
               </CardContent>
             </Card>

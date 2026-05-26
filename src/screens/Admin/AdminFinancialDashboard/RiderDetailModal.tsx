@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import {
   X, MapPin, Phone, Star, Package, CheckCircle2, XCircle,
-  DollarSign, Calendar, ChevronRight, Bike,
+  DollarSign, Calendar, ChevronRight, ChevronDown, Bike,
   Clock, AlertTriangle, TrendingUp, Navigation, Flame, Zap, Filter,
 } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
