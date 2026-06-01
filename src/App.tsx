@@ -53,6 +53,8 @@ import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
 import RiderFuelRequest from "./screens/RiderFuelRequest";
 import AdminFuelRequests from "./screens/AdminFuelRequests";
 import AdminStatistics from "./screens/Admin/AdminStatistics";
+import { ReconciliationAnalytics } from "./screens/ReconciliationAnalytics";
+import { RiderDetail } from "./screens/ReconciliationAnalytics/RiderDetail";
 
 export const App = (): JSX.Element => {
   // Some environments cache component prop types aggressively; this keeps routing flexible.
@@ -288,6 +290,26 @@ export const App = (): JSX.Element => {
                           }
                         />
                         <Route path="/reconciliation-history" element={<Navigate to="/reconciliation" replace />} />
+                        <Route
+                          path="/rider-detail"
+                          element={
+                            <ProtectedRoute allowedRoles={["MANAGER", "ADMIN", "FRONTDESK"]}>
+                              <MainLayout>
+                                <RiderDetail />
+                              </MainLayout>
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/reconciliation-analytics"
+                          element={
+                            <ProtectedRoute allowedRoles={["MANAGER", "ADMIN", "FRONTDESK"]}>
+                              <MainLayout>
+                                <ReconciliationAnalytics />
+                              </MainLayout>
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route
                           path="/reconciliation"
                           element={
