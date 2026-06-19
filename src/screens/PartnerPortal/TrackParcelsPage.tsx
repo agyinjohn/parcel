@@ -1,16 +1,18 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   Search, X, Eye, Printer, ChevronDown, ChevronUp,
-  Package, CheckSquare,
+  Package, CheckSquare, AlertCircle, Pencil,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
-import { statusConfig, formatCurrency, type PartnerParcel } from "./partnerData";
+import { statusConfig, formatCurrency, type PartnerParcel, type PartnerParcelStatus } from "./partnerData";
 import { ParcelDetailModal } from "./ParcelDetailModal";
-
-interface Props { parcels: PartnerParcel[]; }
+import { EditParcelModal } from "./EditParcelModal";
+import { isPartnerParcelEditable } from "./partnerFormUtils";
+import { getVendorSessionProfile } from "./vendorSession";
+import vendorService, { mapApiStatus, mapStatusToApi, mapVendorItemToPartner } from "../../services/vendorService";
 
 // ─── Manifest print ────────────────────────────────────────────────────────────
 function printManifest(stationName: string, parcels: PartnerParcel[], senderName: string) {
@@ -143,7 +145,7 @@ function printManifest(stationName: string, parcels: PartnerParcel[], senderName
 
 // ─── Station group ──────────────────────────────────────────────────────────
 function StationGroup({
-  stationName, parcels, checkedIds, onToggleOne, onToggleAll, onView, senderName,
+  stationName, parcels, checkedIds, onToggleOne, onToggleAll, onView, onEdit, senderName,
 }: {
   stationName: string;
   parcels: PartnerParcel[];
@@ -151,6 +153,7 @@ function StationGroup({
   onToggleOne: (id: string) => void;
   onToggleAll: (ids: string[], check: boolean) => void;
   onView: (p: PartnerParcel) => void;
+  onEdit: (p: PartnerParcel) => void;
   senderName: string;
 }) {
   const [open, setOpen] = useState(true);
@@ -248,10 +251,18 @@ function StationGroup({
                       {new Date(p.submittedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      <Button onClick={() => onView(p)} variant="outline" size="sm"
-                        className="h-7 px-2 text-xs border-[#ea690c] text-[#ea690c] hover:bg-orange-50">
-                        <Eye className="w-3 h-3" />
-                      </Button>
+                      <div className="flex items-center justify-center gap-1">
+                        <Button onClick={() => onView(p)} variant="outline" size="sm"
+                          className="h-7 px-2 text-xs border-[#ea690c] text-[#ea690c] hover:bg-orange-50">
+                          <Eye className="w-3 h-3" />
+                        </Button>
+                        {isPartnerParcelEditable(p.status) && (
+                          <Button onClick={() => onEdit(p)} variant="outline" size="sm"
+                            className="h-7 px-2 text-xs border-gray-300 text-gray-600 hover:bg-gray-50">
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -277,40 +288,73 @@ function StationGroup({
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
-export const TrackParcelsPage = ({ parcels }: Props) => {
+export const TrackParcelsPage = () => {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PartnerParcel["status"] | "">("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PartnerParcelStatus | "">("");
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [viewParcel, setViewParcel] = useState<PartnerParcel | null>(null);
+  const [editParcel, setEditParcel] = useState<PartnerParcel | null>(null);
+  const [parcels, setParcels] = useState<PartnerParcel[]>([]);
+  const [statusCounts, setStatusCounts] = useState<Record<PartnerParcelStatus, number>>({
+    pending: 0, received: 0, delivered: 0, collected: 0, failed: 0, reversed: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const senderName = (() => {
-    try { return JSON.parse(localStorage.getItem("mm_partner_profile") || "{}").businessName || ""; }
-    catch { return ""; }
-  })();
+  const senderName = getVendorSessionProfile().name;
 
-  const filtered = useMemo(() => {
-    let list = [...parcels];
-    if (search.trim()) {
-      const t = search.toLowerCase();
-      list = list.filter(p =>
-        p.trackingId.toLowerCase().includes(t) ||
-        p.receiverName.toLowerCase().includes(t) ||
-        p.receiverPhone.includes(t)
-      );
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const result = await vendorService.getDashboard({
+      search: debouncedSearch || undefined,
+      status: statusFilter ? mapStatusToApi(statusFilter) : undefined,
+    });
+
+    if (!result.success || !result.data) {
+      setError(result.message);
+      setParcels([]);
+      setLoading(false);
+      return;
     }
-    if (statusFilter) list = list.filter(p => p.status === statusFilter);
-    return list;
-  }, [parcels, search, statusFilter]);
 
-  // Group by station
+    const mapped: PartnerParcel[] = [];
+    (result.data.stations || []).forEach((group) => {
+      (group.parcels || []).forEach((item) => {
+        mapped.push(mapVendorItemToPartner(item, group.officeName, group.officeId));
+      });
+    });
+    setParcels(mapped);
+
+    const counts: Record<PartnerParcelStatus, number> = {
+      pending: 0, received: 0, delivered: 0, collected: 0, failed: 0, reversed: 0,
+    };
+    Object.entries(result.data.statusSummary || {}).forEach(([key, value]) => {
+      const localStatus = mapApiStatus(key as Parameters<typeof mapApiStatus>[0]);
+      counts[localStatus] = (counts[localStatus] || 0) + Number(value || 0);
+    });
+    setStatusCounts(counts);
+    setLoading(false);
+  }, [debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, PartnerParcel[]>();
-    filtered.forEach(p => {
+    parcels.forEach(p => {
       if (!map.has(p.station)) map.set(p.station, []);
       map.get(p.station)!.push(p);
     });
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [filtered]);
+  }, [parcels]);
 
   const toggleOne = (id: string) => {
     setCheckedIds(prev => {
@@ -328,7 +372,7 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
     });
   };
 
-  const allIds = filtered.map(p => p.id);
+  const allIds = parcels.map(p => p.id);
   const allChecked = allIds.length > 0 && allIds.every(id => checkedIds.has(id));
   const selectedParcels = parcels.filter(p => checkedIds.has(p.id));
 
@@ -337,7 +381,6 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
   return (
     <div className="space-y-5 pb-10">
 
-      {/* Search + filter row */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -350,35 +393,37 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
             <X className="w-4 h-4" />
           </button>
         )}
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as PartnerParcel["status"] | "")}
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as PartnerParcelStatus | "")}
           className="px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
           <option value="">All Statuses</option>
-          {(Object.keys(statusConfig) as PartnerParcel["status"][]).map(s => (
+          {(Object.keys(statusConfig) as PartnerParcelStatus[]).map(s => (
             <option key={s} value={s}>{statusConfig[s].label}</option>
           ))}
         </select>
       </div>
 
-      {/* Status count strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-        {(Object.entries(statusConfig) as [PartnerParcel["status"], typeof statusConfig[PartnerParcel["status"]]][]).map(([key, cfg]) => {
-          const count = parcels.filter(p => p.status === key).length;
-          return (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(prev => prev === key ? "" : key)}
-              className={`${cfg.color} rounded-xl px-3 py-2.5 text-center border transition-all ${
-                statusFilter === key ? "border-black/20 scale-95 shadow-inner" : "border-black/5 hover:scale-[0.97]"
-              }`}
-            >
-              <p className="text-2xl font-bold">{count}</p>
-              <p className="text-xs font-semibold mt-0.5">{cfg.label}</p>
-            </button>
-          );
-        })}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {(Object.entries(statusConfig) as [PartnerParcelStatus, typeof statusConfig[PartnerParcelStatus]][]).map(([key, cfg]) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(prev => prev === key ? "" : key)}
+            className={`${cfg.color} rounded-xl px-3 py-2.5 text-center border transition-all ${
+              statusFilter === key ? "border-black/20 scale-95 shadow-inner" : "border-black/5 hover:scale-[0.97]"
+            }`}
+          >
+            <p className="text-2xl font-bold">{statusCounts[key] ?? 0}</p>
+            <p className="text-xs font-semibold mt-0.5">{cfg.label}</p>
+          </button>
+        ))}
       </div>
 
-      {/* Bulk action bar */}
       {checkedIds.size > 0 && (
         <div className="flex items-center justify-between bg-orange-50 border border-[#ea690c] rounded-xl px-4 py-2.5">
           <div className="flex items-center gap-2">
@@ -390,7 +435,6 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
           <div className="flex gap-2">
             <Button
               onClick={() => {
-                // Group selected parcels by station and print one manifest per station
                 const byStation = new Map<string, PartnerParcel[]>();
                 selectedParcels.forEach(p => {
                   if (!byStation.has(p.station)) byStation.set(p.station, []);
@@ -411,20 +455,25 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
         </div>
       )}
 
-      {/* Select all / results count */}
       <div className="flex items-center justify-between">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={allChecked} onChange={e => toggleAll(allIds, e.target.checked)}
             className="w-4 h-4 accent-[#ea690c]" />
-          <span className="text-xs font-semibold text-gray-500">Select all {filtered.length} parcels</span>
+          <span className="text-xs font-semibold text-gray-500">Select all {parcels.length} parcels</span>
         </label>
         <p className="text-xs text-gray-400">
-          {grouped.length} station{grouped.length !== 1 ? "s" : ""} · {filtered.length} parcel{filtered.length !== 1 ? "s" : ""}
+          {grouped.length} station{grouped.length !== 1 ? "s" : ""} · {parcels.length} parcel{parcels.length !== 1 ? "s" : ""}
         </p>
       </div>
 
-      {/* Station groups */}
-      {grouped.length === 0 ? (
+      {loading ? (
+        <Card className="border border-[#d1d1d1] bg-white shadow-sm">
+          <CardContent className="py-14 text-center">
+            <div className="w-8 h-8 border-2 border-[#ea690c] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-400">Loading parcels...</p>
+          </CardContent>
+        </Card>
+      ) : grouped.length === 0 ? (
         <Card className="border border-[#d1d1d1] bg-white shadow-sm">
           <CardContent className="py-14 text-center">
             <Search className="w-8 h-8 text-gray-200 mx-auto mb-2" />
@@ -442,13 +491,27 @@ export const TrackParcelsPage = ({ parcels }: Props) => {
               onToggleOne={toggleOne}
               onToggleAll={toggleAll}
               onView={setViewParcel}
+              onEdit={setEditParcel}
               senderName={senderName}
             />
           ))}
         </div>
       )}
 
-      {viewParcel && <ParcelDetailModal parcel={viewParcel} onClose={() => setViewParcel(null)} />}
+      {viewParcel && (
+        <ParcelDetailModal
+          parcel={viewParcel}
+          onClose={() => setViewParcel(null)}
+          onEdit={(p) => { setViewParcel(null); setEditParcel(p); }}
+        />
+      )}
+      {editParcel && (
+        <EditParcelModal
+          parcel={editParcel}
+          onClose={() => setEditParcel(null)}
+          onSaved={() => { setEditParcel(null); loadDashboard(); }}
+        />
+      )}
     </div>
   );
 };

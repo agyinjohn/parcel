@@ -1,16 +1,19 @@
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { statusConfig, formatCurrency, type PartnerParcel } from "./partnerData";
+import { isPartnerParcelEditable } from "./partnerFormUtils";
 
 interface Props {
   parcel: PartnerParcel;
   onClose: () => void;
+  onEdit?: (parcel: PartnerParcel) => void;
 }
 
-export const ParcelDetailModal = ({ parcel, onClose }: Props) => {
+export const ParcelDetailModal = ({ parcel, onClose, onEdit }: Props) => {
   const s = statusConfig[parcel.status];
+  const canEdit = isPartnerParcelEditable(parcel.status);
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -77,9 +80,20 @@ export const ParcelDetailModal = ({ parcel, onClose }: Props) => {
               </div>
             </div>
 
-            <Button onClick={onClose} className="w-full bg-[#ea690c] text-white hover:bg-[#d45e0a] h-10 font-semibold">
-              Close
-            </Button>
+            <div className="flex gap-3">
+              {canEdit && onEdit && (
+                <Button
+                  onClick={() => onEdit(parcel)}
+                  variant="outline"
+                  className="flex-1 border-[#ea690c] text-[#ea690c] hover:bg-orange-50 h-10 font-semibold flex items-center justify-center gap-2"
+                >
+                  <Pencil className="w-4 h-4" /> Edit Parcel
+                </Button>
+              )}
+              <Button onClick={onClose} className={`${canEdit && onEdit ? "flex-1" : "w-full"} bg-[#ea690c] text-white hover:bg-[#d45e0a] h-10 font-semibold`}>
+                Close
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -21,6 +21,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
             return <Navigate to="/rider/dashboard" replace />;
         } else if (userRole === "CALLER") {
             return <Navigate to="/call-center" replace />;
+        } else if (userRole === "VENDOR") {
+            return <Navigate to="/partner" replace />;
         } else {
             return <Navigate to="/parcel-intake" replace />;
         }

@@ -5,13 +5,54 @@ import { API_ENDPOINTS } from '../config/api';
 const API_BASE_URL_ADMIN = API_ENDPOINTS.ADMIN;
 const API_BASE_URL_USER = API_ENDPOINTS.USER;
 
+export type AdminCreatableRole = "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER" | "VENDOR";
+
+/** Backend API role values */
+export type BackendRole = "ADMIN" | "MANAGER" | "FRONTDESK" | "RIDER" | "CALLCENTER" | "VENDOR";
+
+/** Convert app/UI role to the value expected by the backend API */
+export const toBackendRole = (role: string): BackendRole => {
+    const r = role.toUpperCase().trim();
+    if (["CALLER", "CALLCENTER", "CALL_CENTER", "CALL-CENTER", "CALL CENTER"].includes(r)) {
+        return "CALLCENTER";
+    }
+    return r as BackendRole;
+};
+
+/** Convert backend API role to internal app role (routes, sidebar, filters) */
+export const fromBackendRole = (role: string): AdminCreatableRole | "ADMIN" => {
+    const r = role?.toUpperCase()?.trim() || "";
+    if (["CALLCENTER", "CALL_CENTER", "CALL-CENTER", "CALL CENTER", "CALLER"].includes(r)) {
+        return "CALLER";
+    }
+    if (r === "VENDOR") return "VENDOR";
+    if (r === "ADMIN") return "ADMIN";
+    if (r === "MANAGER") return "MANAGER";
+    if (r === "FRONTDESK") return "FRONTDESK";
+    if (r === "RIDER") return "RIDER";
+    return "FRONTDESK";
+};
+
+export const roleRequiresOffice = (role: string): boolean =>
+    toBackendRole(role) !== "VENDOR";
+
 interface CreateUserRequest {
     name: string;
     email: string;
     password?: string; // Optional according to API spec
     phoneNumber: string;
-    role: "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER";
-    officeId: string;
+    role: AdminCreatableRole;
+    officeId?: string;
+}
+
+/** Payload shape sent to POST /register */
+interface BackendCreateUserRequest {
+    name: string;
+    email: string;
+    password?: string;
+    phoneNumber: string;
+    role: BackendRole;
+    officeId?: string;
 }
 
 interface UserResponse {
@@ -50,7 +91,7 @@ interface ApiUser {
         createdAt?: number;
         updatedAt?: number;
     };
-    role: "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER";
+    role: AdminCreatableRole | "ADMIN";
     createdAt?: number;
     updatedAt?: number;
     token?: string; // Token may be included in login/registration responses
@@ -130,9 +171,18 @@ class UserService {
      */
     async createUser(userData: CreateUserRequest): Promise<UserResponse> {
         try {
+            const payload: BackendCreateUserRequest = {
+                name: userData.name,
+                email: userData.email,
+                phoneNumber: userData.phoneNumber,
+                role: toBackendRole(userData.role),
+            };
+            if (userData.password) payload.password = userData.password;
+            if (userData.officeId) payload.officeId = userData.officeId;
+
             const response = await this.apiClientAdmin.post<UserResponse>(
                 '/register',
-                userData
+                payload
             );
 
             return {
@@ -177,7 +227,12 @@ class UserService {
             console.log('Users response:', response.data);
 
             // If response is an array, wrap it in pagination format
-            const users = Array.isArray(response.data) ? response.data : response.data?.content || [];
+            const users = (Array.isArray(response.data) ? response.data : response.data?.content || []).map(
+                (user: ApiUser) => ({
+                    ...user,
+                    role: fromBackendRole(user.role) as ApiUser["role"],
+                })
+            );
             
             return {
                 success: true,
@@ -267,7 +322,7 @@ export const getUserOfficeId = (user: ApiUser): string | undefined => {
     return user.office?.id;
 };
 
-export type { ApiUser, PageUser, PageableRequest };
+export type { ApiUser, PageUser, PageableRequest, AdminCreatableRole, BackendRole };
 
 export default new UserService();
 

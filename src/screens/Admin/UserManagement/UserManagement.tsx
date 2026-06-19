@@ -9,7 +9,7 @@ import { formatPhoneNumber } from "../../../utils/dataHelpers";
 import { useLocation } from "../../../contexts/LocationContext";
 import { useUser } from "../../../contexts/UserContext";
 import { useToast } from "../../../components/ui/toast";
-import userService from "../../../services/userService";
+import userService, { AdminCreatableRole, fromBackendRole, roleRequiresOffice } from "../../../services/userService";
 
 const roleColors: Record<string, string> = {
     ADMIN: "bg-red-100 text-red-800",
@@ -17,6 +17,8 @@ const roleColors: Record<string, string> = {
     FRONTDESK: "bg-green-100 text-green-800",
     RIDER: "bg-purple-100 text-purple-800",
     CALLER: "bg-orange-100 text-orange-800",
+    CALLCENTER: "bg-orange-100 text-orange-800",
+    VENDOR: "bg-teal-100 text-teal-800",
 };
 
 const statusColors: Record<string, string> = {
@@ -78,7 +80,8 @@ export const UserManagement = (): JSX.Element => {
     }, []);
 
     const filteredUsers = users.filter((user) => {
-        if (filterRole && user.role !== filterRole) return false;
+        const appRole = fromBackendRole(user.role);
+        if (filterRole && appRole !== filterRole) return false;
         if (filterStation && getUserOfficeId(user) !== filterStation) return false;
         return true;
     });
@@ -196,7 +199,7 @@ export const UserManagement = (): JSX.Element => {
             return;
         }
 
-        if (!formData.officeId) {
+        if (roleRequiresOffice(formData.role) && !formData.officeId) {
             showToast("Office/Station is required", "error");
             return;
         }
@@ -204,20 +207,22 @@ export const UserManagement = (): JSX.Element => {
         setIsCreating(true);
         try {
             // Prepare request payload - password is optional
-            const requestPayload: any = {
+            const requestPayload: Record<string, string> = {
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
                 phoneNumber: formattedPhone,
-                role: formData.role as "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER",
-                officeId: formData.officeId,
+                role: formData.role,
             };
 
-            // Only include password if provided
-            if (formData.password && formData.password.trim().length > 0) {
-                requestPayload.password = formData.password;
+            if (roleRequiresOffice(formData.role) && formData.officeId) {
+                requestPayload.officeId = formData.officeId;
             }
 
-            const response = await userService.createUser(requestPayload);
+            const response = await userService.createUser({
+                ...requestPayload,
+                role: formData.role as AdminCreatableRole,
+                ...(formData.password?.trim() ? { password: formData.password } : {}),
+            });
 
             if (response.success) {
                 showToast(`User "${formData.name}" created successfully!`, "success");
@@ -390,7 +395,14 @@ export const UserManagement = (): JSX.Element => {
                                             </Label>
                                             <select
                                                 value={formData.role}
-                                                onChange={(e) => setFormData({ ...formData, role: e.target.value as "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" })}
+                                                onChange={(e) => {
+                                                    const role = e.target.value as AdminCreatableRole;
+                                                    setFormData({
+                                                        ...formData,
+                                                        role,
+                                                        officeId: roleRequiresOffice(role) ? formData.officeId : "",
+                                                    });
+                                                }}
                                                 className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                             >
                                                 <option value="ADMIN">Admin</option>
@@ -398,9 +410,11 @@ export const UserManagement = (): JSX.Element => {
                                                 <option value="FRONTDESK">Front Desk</option>
                                                 <option value="RIDER">Rider</option>
                                                 <option value="CALLER">Caller</option>
+                                                <option value="VENDOR">Vendor</option>
                                             </select>
                                         </div>
 
+                                        {roleRequiresOffice(formData.role) && (
                                         <div>
                                             <Label className="block text-sm font-semibold text-neutral-800 mb-2">
                                                 Office/Station <span className="text-[#e22420]">*</span>
@@ -423,6 +437,7 @@ export const UserManagement = (): JSX.Element => {
                                                 </p>
                                             )}
                                         </div>
+                                        )}
                                     </div>
 
                                     <div className="flex gap-3 pt-4">
@@ -432,7 +447,7 @@ export const UserManagement = (): JSX.Element => {
                                                 !formData.name.trim() ||
                                                 !formData.email.trim() ||
                                                 !formData.phoneNumber.trim() ||
-                                                !formData.officeId ||
+                                                (roleRequiresOffice(formData.role) && !formData.officeId) ||
                                                 isCreating
                                             }
                                             className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 flex items-center justify-center gap-2"
@@ -489,6 +504,7 @@ export const UserManagement = (): JSX.Element => {
                                         <option value="FRONTDESK">Front Desk</option>
                                         <option value="RIDER">Rider</option>
                                         <option value="CALLER">Caller</option>
+                                        <option value="VENDOR">Vendor</option>
                                     </select>
                                 </div>
 
@@ -637,8 +653,8 @@ export const UserManagement = (): JSX.Element => {
                                                                     </div>
                                                                 </td>
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
-                                                                    <Badge className={roleColors[user.role] || "bg-gray-100 text-gray-800"}>
-                                                                        <span className="text-xs">{user.role.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                                    <Badge className={roleColors[fromBackendRole(user.role)] || roleColors[user.role] || "bg-gray-100 text-gray-800"}>
+                                                                        <span className="text-xs">{fromBackendRole(user.role).replace(/([A-Z])/g, ' $1').trim()}</span>
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
@@ -662,7 +678,7 @@ export const UserManagement = (): JSX.Element => {
                                                                     >
                                                                         <Trash2 size={16} />
                                                                     </button>
-                                                                    {(user.role === "RIDER" || !getUserOfficeId(user)) && (
+                                                                    {(fromBackendRole(user.role) === "RIDER" || !getUserOfficeId(user)) && (
                                                                         <button
                                                                             onClick={() => handleInitiateAddToStation({ userId: user.userId, name: user.name, phoneNumber: user.phoneNumber })}
                                                                             className="text-[#ea690c] hover:bg-orange-50 p-2 rounded transition-colors"

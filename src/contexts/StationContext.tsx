@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 import authService from "../services/authService";
 
-export type UserRole = "ADMIN" | "MANAGER" | "FRONTDESK" | "RIDER" | "CALLER";
+export type UserRole = "ADMIN" | "MANAGER" | "FRONTDESK" | "RIDER" | "CALLER" | "VENDOR";
 
 interface Station {
     id: string;
@@ -49,9 +49,9 @@ interface StationContextType {
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
 // Helper to normalize role
-const normalizeRole = (role: string): UserRole => {
+export const normalizeRole = (role: string): UserRole => {
     const roleUpper = role?.toUpperCase().trim();
-    const validRoles: UserRole[] = ["ADMIN", "MANAGER", "FRONTDESK", "RIDER", "CALLER"];
+    const validRoles: UserRole[] = ["ADMIN", "MANAGER", "FRONTDESK", "RIDER", "CALLER", "VENDOR"];
 
     // Map old role names to new ones for backward compatibility
     const roleMapping: Record<string, UserRole> = {
@@ -74,6 +74,8 @@ const normalizeRole = (role: string): UserRole => {
         'CALLCENTER': 'CALLER',
         'CALL_CENTER': 'CALLER',
         'CALL CENTER': 'CALLER',
+        'VENDOR': 'VENDOR',
+        'vendor': 'VENDOR',
     };
 
     // Check if role exists in mapping

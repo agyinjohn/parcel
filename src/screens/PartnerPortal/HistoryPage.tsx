@@ -1,40 +1,103 @@
-import { useState, useMemo } from "react";
-import { Search, Filter, ChevronDown, ChevronUp, Eye, History } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Search, Filter, ChevronDown, ChevronUp, Eye, History, AlertCircle, Pencil, Calendar } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
-import { statusConfig, formatCurrency, MOCK_STATIONS, type PartnerParcel } from "./partnerData";
+import { statusConfig, formatCurrency, type PartnerParcel, type PartnerParcelStatus } from "./partnerData";
 import { ParcelDetailModal } from "./ParcelDetailModal";
+import { EditParcelModal } from "./EditParcelModal";
+import { isPartnerParcelEditable } from "./partnerFormUtils";
+import { useVendorStations } from "./useVendorStations";
+import vendorService, { mapApiParcelToPartner, mapStatusToApi } from "../../services/vendorService";
 
-interface Props { parcels: PartnerParcel[]; }
-
-export const HistoryPage = ({ parcels }: Props) => {
+export const HistoryPage = () => {
+  const { stations } = useVendorStations();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PartnerParcelStatus | "">("");
   const [stationFilter, setStationFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewParcel, setViewParcel] = useState<PartnerParcel | null>(null);
+  const [editParcel, setEditParcel] = useState<PartnerParcel | null>(null);
+  const [parcels, setParcels] = useState<PartnerParcel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadParcels = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const result = await vendorService.listParcels({
+      search: debouncedSearch || undefined,
+      status: statusFilter ? mapStatusToApi(statusFilter) : undefined,
+      toOfficeId: stationFilter || undefined,
+      size: 500,
+    });
+
+    if (!result.success) {
+      setError(result.message);
+      setParcels([]);
+      setLoading(false);
+      return;
+    }
+
+    const mapped = (result.data?.content || []).map(mapApiParcelToPartner);
+    setParcels(mapped.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
+    setLoading(false);
+  }, [debouncedSearch, statusFilter, stationFilter]);
+
+  useEffect(() => {
+    loadParcels();
+  }, [loadParcels]);
 
   const filtered = useMemo(() => {
-    let list = [...parcels];
-    if (search.trim()) {
-      const t = search.toLowerCase();
-      list = list.filter(p => p.trackingId.toLowerCase().includes(t) || p.receiverName.toLowerCase().includes(t) || p.receiverPhone.includes(t));
-    }
-    if (statusFilter) list = list.filter(p => p.status === statusFilter);
-    if (stationFilter) list = list.filter(p => p.stationId === stationFilter);
-    return list.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
-  }, [parcels, search, statusFilter, stationFilter]);
+    if (!dateFrom && !dateTo) return parcels;
 
-  const clearFilters = () => { setSearch(""); setStatusFilter(""); setStationFilter(""); setShowFilters(false); };
-  const hasFilters = search || statusFilter || stationFilter;
+    return parcels.filter(p => {
+      const submitted = new Date(p.submittedAt);
+      if (Number.isNaN(submitted.getTime())) return false;
+
+      const day = new Date(submitted.getFullYear(), submitted.getMonth(), submitted.getDate());
+
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        from.setHours(0, 0, 0, 0);
+        if (day < from) return false;
+      }
+
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (day > to) return false;
+      }
+
+      return true;
+    });
+  }, [parcels, dateFrom, dateTo]);
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("");
+    setStationFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setShowFilters(false);
+  };
+  const hasFilters = search || statusFilter || stationFilter || dateFrom || dateTo;
 
   return (
     <div className="space-y-4 pb-10">
 
-      {/* Search + filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
@@ -48,7 +111,7 @@ export const HistoryPage = ({ parcels }: Props) => {
         >
           <Filter className="w-4 h-4" />
           Filters
-          {hasFilters && <span className="bg-white text-[#ea690c] text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{[statusFilter, stationFilter].filter(Boolean).length}</span>}
+          {hasFilters && <span className="bg-white text-[#ea690c] text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">{[statusFilter, stationFilter, dateFrom || dateTo].filter(Boolean).length}</span>}
           {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
         {hasFilters && (
@@ -58,17 +121,23 @@ export const HistoryPage = ({ parcels }: Props) => {
         )}
       </div>
 
-      {/* Filter panel */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
       {showFilters && (
         <Card className="border border-[#d1d1d1] bg-white shadow-sm">
           <CardContent className="p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-neutral-800">Status</Label>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as PartnerParcelStatus | "")}
                   className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
                   <option value="">All Statuses</option>
-                  {(Object.keys(statusConfig) as PartnerParcel["status"][]).map(s => (
+                  {(Object.keys(statusConfig) as PartnerParcelStatus[]).map(s => (
                     <option key={s} value={s}>{statusConfig[s].label}</option>
                   ))}
                 </select>
@@ -78,21 +147,46 @@ export const HistoryPage = ({ parcels }: Props) => {
                 <select value={stationFilter} onChange={e => setStationFilter(e.target.value)}
                   className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
                   <option value="">All Stations</option>
-                  {MOCK_STATIONS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-neutral-800">From date</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={e => setDateFrom(e.target.value)}
+                    className="pl-9 border border-[#d1d1d1]"
+                    max={dateTo || today}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-neutral-800">To date</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="pl-9 border border-[#d1d1d1]"
+                    min={dateFrom}
+                    max={today}
+                  />
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Result count */}
       <p className="text-xs text-gray-500 font-medium">
         {filtered.length} parcel{filtered.length !== 1 ? "s" : ""} found
         {hasFilters && " (filtered)"}
       </p>
 
-      {/* Table */}
       <Card className="border border-[#d1d1d1] bg-white shadow-sm overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -105,7 +199,14 @@ export const HistoryPage = ({ parcels }: Props) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 bg-white">
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="py-14 text-center">
+                      <div className="w-8 h-8 border-2 border-[#ea690c] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-sm text-gray-400">Loading history...</p>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-14 text-center">
                       <History className="w-8 h-8 text-gray-200 mx-auto mb-2" />
@@ -142,10 +243,18 @@ export const HistoryPage = ({ parcels }: Props) => {
                           {new Date(p.submittedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <Button onClick={() => setViewParcel(p)} variant="outline" size="sm"
-                            className="h-7 w-7 p-0 border-[#ea690c] text-[#ea690c] hover:bg-orange-50">
-                            <Eye className="w-3 h-3" />
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button onClick={() => setViewParcel(p)} variant="outline" size="sm"
+                              className="h-7 w-7 p-0 border-[#ea690c] text-[#ea690c] hover:bg-orange-50">
+                              <Eye className="w-3 h-3" />
+                            </Button>
+                            {isPartnerParcelEditable(p.status) && (
+                              <Button onClick={() => setEditParcel(p)} variant="outline" size="sm"
+                                className="h-7 w-7 p-0 border-gray-300 text-gray-600 hover:bg-gray-50">
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -157,7 +266,20 @@ export const HistoryPage = ({ parcels }: Props) => {
         </CardContent>
       </Card>
 
-      {viewParcel && <ParcelDetailModal parcel={viewParcel} onClose={() => setViewParcel(null)} />}
+      {viewParcel && (
+        <ParcelDetailModal
+          parcel={viewParcel}
+          onClose={() => setViewParcel(null)}
+          onEdit={(p) => { setViewParcel(null); setEditParcel(p); }}
+        />
+      )}
+      {editParcel && (
+        <EditParcelModal
+          parcel={editParcel}
+          onClose={() => setEditParcel(null)}
+          onSaved={() => { setEditParcel(null); loadParcels(); }}
+        />
+      )}
     </div>
   );
 };

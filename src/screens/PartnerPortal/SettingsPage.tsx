@@ -1,23 +1,15 @@
 import { useState } from "react";
 import {
-  Building2, Phone, Mail, MapPin, Globe, Save,
+  Building2, Save,
   Bell, BellOff, Shield, Eye, EyeOff, Key,
   Palette, Languages, Clock, CheckCircle2, AlertCircle,
-  User, ChevronRight, Camera,
+  User, ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-
-const PARTNER_PROFILE_KEY = "mm_partner_profile";
-
-function getStored<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch { return fallback; }
-}
+import { getVendorSessionProfile } from "./vendorSession";
 
 // ─── Section wrapper ───────────────────────────────────────────────────────────
 function Section({ title, description, icon: Icon, children }: {
@@ -86,19 +78,7 @@ function SaveToast({ show, error }: { show: boolean; error?: boolean }) {
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
 export const SettingsPage = () => {
-  const stored = getStored(PARTNER_PROFILE_KEY, { businessName: "", contactPhone: "" });
-
-  // Business profile
-  const [profile, setProfile] = useState({
-    businessName: stored.businessName || "",
-    contactPhone: stored.contactPhone || "",
-    email: "",
-    website: "",
-    address: "",
-    city: "",
-    country: "Ghana",
-    description: "",
-  });
+  const vendor = getVendorSessionProfile();
 
   // Notifications
   const [notifications, setNotifications] = useState({
@@ -140,13 +120,6 @@ export const SettingsPage = () => {
   const saveSection = async (section: string) => {
     setSaving(section);
     await new Promise(r => setTimeout(r, 700));
-    // Persist business profile to localStorage (same key as SendParcelsPage uses)
-    if (section === "profile") {
-      localStorage.setItem(PARTNER_PROFILE_KEY, JSON.stringify({
-        businessName: profile.businessName,
-        contactPhone: profile.contactPhone,
-      }));
-    }
     if (section === "preferences") {
       localStorage.setItem("mm_partner_preferences", JSON.stringify(preferences));
     }
@@ -195,115 +168,50 @@ export const SettingsPage = () => {
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg">
                     <Building2 className="w-8 h-8 text-white" />
                   </div>
-                  <button className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#ea690c] rounded-full flex items-center justify-center shadow border-2 border-white hover:bg-[#d45e0a] transition-colors">
-                    <Camera className="w-3 h-3 text-white" />
-                  </button>
                 </div>
                 <div>
-                  <p className="text-base font-bold text-neutral-800">{profile.businessName || "Your Business"}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Partner Account · {profile.city || "Ghana"}</p>
-                  <p className="text-xs text-[#ea690c] mt-1 font-medium">Logo upload available after account activation</p>
+                  <p className="text-base font-bold text-neutral-800">{vendor.name || "Partner Account"}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Vendor · {vendor.role}</p>
+                  {vendor.email && (
+                    <p className="text-xs text-gray-500 mt-0.5">{vendor.email}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Business info */}
-          <Section title="Business Information" description="Your business details shown on parcels and invoices" icon={Building2}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">Business / Shop Name <span className="text-red-500">*</span></Label>
-                <Input value={profile.businessName} onChange={e => setProfile(p => ({ ...p, businessName: e.target.value }))}
-                  placeholder="e.g. Jumia, My Online Shop" className="border border-[#d1d1d1]" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">Contact Phone</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                  <Input value={profile.contactPhone} onChange={e => setProfile(p => ({ ...p, contactPhone: e.target.value }))}
-                    placeholder="+233 XX XXX XXXX" className="pl-9 border border-[#d1d1d1]" />
+          {/* Account info from login */}
+          <Section title="Account Information" description="Details from your M&M partner account" icon={Building2}>
+            <div className="space-y-3">
+              {[
+                { label: "Name", value: vendor.name || "—" },
+                { label: "Email", value: vendor.email || "—" },
+                { label: "Phone", value: vendor.phoneNumber || "—" },
+                { label: "User ID", value: vendor.userId || "—" },
+                { label: "Role", value: vendor.role || "—" },
+                { label: "Account Type", value: "Third-party Partner" },
+              ].map(row => (
+                <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                  <span className="text-sm text-gray-500">{row.label}</span>
+                  <span className="text-sm font-semibold text-neutral-800 text-right max-w-[60%] break-all">{row.value}</span>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                  <Input value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))}
-                    placeholder="business@example.com" className="pl-9 border border-[#d1d1d1]" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">Website</Label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                  <Input value={profile.website} onChange={e => setProfile(p => ({ ...p, website: e.target.value }))}
-                    placeholder="https://yourbusiness.com" className="pl-9 border border-[#d1d1d1]" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">City</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                  <Input value={profile.city} onChange={e => setProfile(p => ({ ...p, city: e.target.value }))}
-                    placeholder="Accra" className="pl-9 border border-[#d1d1d1]" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-neutral-800">Country</Label>
-                <select value={profile.country} onChange={e => setProfile(p => ({ ...p, country: e.target.value }))}
-                  className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
-                  <option value="Ghana">Ghana</option>
-                  <option value="Nigeria">Nigeria</option>
-                  <option value="Ivory Coast">Ivory Coast</option>
-                  <option value="Togo">Togo</option>
-                  <option value="Benin">Benin</option>
-                </select>
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs font-semibold text-neutral-800">Business Address</Label>
-                <Input value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))}
-                  placeholder="Street, Area, City" className="border border-[#d1d1d1]" />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs font-semibold text-neutral-800">Business Description</Label>
-                <textarea
-                  value={profile.description}
-                  onChange={e => setProfile(p => ({ ...p, description: e.target.value }))}
-                  placeholder="Briefly describe what your business sells or does..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c] resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end mt-4 pt-4 border-t border-gray-100">
-              <Button onClick={() => saveSection("profile")} disabled={saving === "profile"}
-                className="flex items-center gap-2 bg-[#ea690c] text-white hover:bg-[#d45e0a] disabled:opacity-60 h-9 px-5">
-                {saving === "profile"
-                  ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
-                  : <><Save className="w-3.5 h-3.5" /> Save Profile</>}
-              </Button>
+              ))}
             </div>
           </Section>
 
-          {/* Account info (read-only — will be filled when account is activated) */}
-          <Section title="Account Details" description="Set by M&M upon account activation" icon={User}>
+          {/* Account details */}
+          <Section title="Account Details" description="Your partner account status" icon={User}>
             <div className="space-y-3">
               {[
-                { label: "Partner ID",      value: "Assigned on activation" },
-                { label: "Account Status",  value: "Pending Activation" },
-                { label: "Account Type",    value: "Third-party Partner" },
-                { label: "Member Since",    value: "—" },
+                { label: "Partner ID", value: vendor.userId || "—" },
+                { label: "Account Status", value: "Active" },
+                { label: "Account Type", value: "Third-party Partner" },
               ].map(row => (
                 <div key={row.label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
                   <span className="text-sm text-gray-500">{row.label}</span>
                   <span className="text-sm font-semibold text-neutral-800">{row.value}</span>
                 </div>
               ))}
-              <div className="mt-2 p-3 bg-orange-50 border border-orange-100 rounded-xl">
-                <p className="text-xs text-[#ea690c] font-medium">
-                  Your account is pending activation by M&M. Contact support to complete setup.
-                </p>
-              </div>
             </div>
           </Section>
         </div>

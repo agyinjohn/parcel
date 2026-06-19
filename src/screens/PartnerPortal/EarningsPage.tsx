@@ -1,30 +1,68 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { DollarSign, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
-import { formatCurrency, MOCK_STATIONS, type PartnerParcel } from "./partnerData";
+import { formatCurrency } from "./partnerData";
+import vendorService, { type VendorEarningsResponse } from "../../services/vendorService";
 
-interface Props { parcels: PartnerParcel[]; }
+export const EarningsPage = () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<VendorEarningsResponse | undefined>();
 
-export const EarningsPage = ({ parcels }: Props) => {
-  const totalEarnable  = useMemo(() => parcels.filter(p => p.pod).reduce((s, p) => s + p.itemCost + p.deliveryFee, 0), [parcels]);
-  const totalCollected = useMemo(() => parcels.filter(p => p.status === "collected").reduce((s, p) => s + p.itemCost + p.deliveryFee, 0), [parcels]);
-  const totalPending   = useMemo(() => parcels.filter(p => p.pod && p.status !== "collected" && p.status !== "failed").reduce((s, p) => s + p.itemCost + p.deliveryFee, 0), [parcels]);
-  const totalFailed    = useMemo(() => parcels.filter(p => p.status === "failed").length, [parcels]);
-  const collectionPct  = totalEarnable > 0 ? (totalCollected / totalEarnable) * 100 : 0;
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      const result = await vendorService.getEarnings();
+      if (cancelled) return;
+      if (!result.success) {
+        setError(result.message);
+      } else {
+        setData(result.data);
+      }
+      setLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const totalEarnable = data?.totalEarnable ?? 0;
+  const totalCollected = data?.amountReady ?? 0;
+  const totalPending = data?.pendingPayout ?? 0;
+  const totalFailed = data?.failedDeliveriesCount ?? 0;
+  const collectionPct = data?.collectionRate != null
+    ? data.collectionRate
+    : (totalEarnable > 0 ? (totalCollected / totalEarnable) * 100 : 0);
 
   const summaryCards = [
-    { label: "Total Earnable",  value: formatCurrency(totalEarnable),  sub: "All POD parcels",          icon: DollarSign,   color: "text-[#ea690c]", bg: "bg-orange-50",  border: "border-orange-200" },
-    { label: "Amount Ready",    value: formatCurrency(totalCollected), sub: "Collected by recipients",   icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50",   border: "border-green-200" },
-    { label: "Pending Payout",  value: formatCurrency(totalPending),   sub: "Awaiting collection",       icon: Clock,        color: "text-purple-600",bg: "bg-purple-50",  border: "border-purple-200" },
-    { label: "Failed Deliveries",value: `${totalFailed} parcel${totalFailed !== 1 ? "s" : ""}`, sub: "Not delivered", icon: AlertCircle, color: "text-red-500", bg: "bg-red-50", border: "border-red-200" },
+    { label: "Total Earnable", value: formatCurrency(totalEarnable), sub: "All POD parcels", icon: DollarSign, color: "text-[#ea690c]", bg: "bg-orange-50", border: "border-orange-200" },
+    { label: "Amount Ready", value: formatCurrency(totalCollected), sub: "Collected by recipients", icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", border: "border-green-200" },
+    { label: "Pending Payout", value: formatCurrency(totalPending), sub: "Awaiting collection", icon: Clock, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-200" },
+    { label: "Failed Deliveries", value: `${totalFailed} parcel${totalFailed !== 1 ? "s" : ""}`, sub: "Not delivered", icon: AlertCircle, color: "text-red-500", bg: "bg-red-50", border: "border-red-200" },
   ];
 
-  const collectedParcels = parcels.filter(p => p.status === "collected");
+  const collectedParcels = data?.collectedParcels || [];
+
+  if (loading) {
+    return (
+      <div className="py-20 text-center">
+        <div className="w-8 h-8 border-2 border-[#ea690c] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-400">Loading reconciliation...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-10">
 
-      {/* KPI Cards */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map(c => (
           <Card key={c.label} className={`border ${c.border} shadow-sm`}>
@@ -44,7 +82,6 @@ export const EarningsPage = ({ parcels }: Props) => {
         ))}
       </div>
 
-      {/* Collection rate */}
       <Card className="border border-[#d1d1d1] bg-white shadow-sm">
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-3">
@@ -57,7 +94,7 @@ export const EarningsPage = ({ parcels }: Props) => {
           <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
             <div
               className="h-3 rounded-full bg-gradient-to-r from-[#ea690c] to-orange-400 transition-all duration-700"
-              style={{ width: `${collectionPct}%` }}
+              style={{ width: `${Math.min(collectionPct, 100)}%` }}
             />
           </div>
           <div className="flex justify-between text-xs mt-2">
@@ -67,41 +104,40 @@ export const EarningsPage = ({ parcels }: Props) => {
         </CardContent>
       </Card>
 
-      {/* Per-station breakdown */}
       <Card className="border border-[#d1d1d1] bg-white shadow-sm">
         <CardContent className="p-5">
-          <h3 className="text-sm font-bold text-neutral-800 mb-4">Earnings by Station</h3>
+          <h3 className="text-sm font-bold text-neutral-800 mb-4">Reconciliation by Station</h3>
           <div className="space-y-4">
-            {MOCK_STATIONS.map(station => {
-              const sp = parcels.filter(p => p.stationId === station.id);
-              if (sp.length === 0) return null;
-              const earned = sp.filter(p => p.status === "collected").reduce((s, p) => s + p.itemCost + p.deliveryFee, 0);
-              const total  = sp.filter(p => p.pod).reduce((s, p) => s + p.itemCost + p.deliveryFee, 0);
-              const pct    = total > 0 ? (earned / total) * 100 : 0;
-              return (
-                <div key={station.id}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-neutral-800">{station.name}</span>
-                      <span className="text-xs text-gray-400">— {station.location}</span>
+            {(data?.earningsByStation || []).length === 0 ? (
+              <p className="text-sm text-gray-400">No station reconciliation data yet</p>
+            ) : (
+              (data?.earningsByStation || []).map(station => {
+                const earned = station.collectedAmount ?? 0;
+                const total = station.totalAmount ?? 0;
+                const pct = total > 0 ? (earned / total) * 100 : 0;
+                return (
+                  <div key={station.officeId}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-semibold text-neutral-800">{station.officeName}</span>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-[#ea690c]">{formatCurrency(earned)}</span>
+                        <span className="text-xs text-gray-400 ml-1">/ {formatCurrency(total)}</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-bold text-[#ea690c]">{formatCurrency(earned)}</span>
-                      <span className="text-xs text-gray-400 ml-1">/ {formatCurrency(total)}</span>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div className="h-2.5 rounded-full bg-[#ea690c] transition-all duration-700" style={{ width: `${pct}%` }} />
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {station.parcelCount ?? 0} parcel{(station.parcelCount ?? 0) !== 1 ? "s" : ""} · {Math.round(pct)}% collected
+                    </p>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div className="h-2.5 rounded-full bg-[#ea690c] transition-all duration-700" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">{sp.length} parcel{sp.length !== 1 ? "s" : ""} · {Math.round(pct)}% collected</p>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Collected parcels ready for payout */}
       <Card className="border border-[#d1d1d1] bg-white shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
@@ -131,15 +167,15 @@ export const EarningsPage = ({ parcels }: Props) => {
                 </tr>
               ) : (
                 collectedParcels.map(p => (
-                  <tr key={p.id} className="hover:bg-green-50/30 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-[#ea690c] bg-orange-50/50">{p.trackingId}</td>
+                  <tr key={p.parcelId} className="hover:bg-green-50/30 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-[#ea690c] bg-orange-50/50">{p.parcelId}</td>
                     <td className="px-4 py-3 text-sm font-medium text-neutral-800">{p.receiverName}</td>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{p.station}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(p.itemCost)}</td>
-                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(p.deliveryFee)}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-[#ea690c]">{formatCurrency(p.itemCost + p.deliveryFee)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{p.stationName}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(p.itemCost ?? 0)}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(p.deliveryFee ?? 0)}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-[#ea690c]">{formatCurrency(p.total ?? ((p.itemCost ?? 0) + (p.deliveryFee ?? 0)))}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {p.collectedAt ? new Date(p.collectedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                     </td>
                   </tr>
                 ))

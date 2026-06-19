@@ -18,7 +18,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Card, CardContent } from "../../components/ui/card";
-import { useStation } from "../../contexts/StationContext";
+import { useStation, normalizeRole } from "../../contexts/StationContext";
 import authService from "../../services/authService";
 
 export const Login = (): JSX.Element => {
@@ -48,6 +48,8 @@ export const Login = (): JSX.Element => {
           navigate("/rider/dashboard", { replace: true });
         } else if (userRole === "CALLER") {
           navigate("/call-center", { replace: true });
+        } else if (userRole === "VENDOR") {
+          navigate("/partner", { replace: true });
         } else {
           navigate("/parcel-search", { replace: true });
         }
@@ -136,16 +138,7 @@ export const Login = (): JSX.Element => {
 
       if (response.data) {
         const userData = response.data.user;
-        let normalizedRole = userData.role?.toUpperCase() || "FRONTDESK";
-        if (["STATION-MANAGER", "STATION_MANAGER", "STATION MANAGER"].includes(normalizedRole)) {
-          normalizedRole = "MANAGER";
-        }
-        if (["FRONT-DESK", "FRONT_DESK", "FRONT DESK"].includes(normalizedRole)) {
-          normalizedRole = "FRONTDESK";
-        }
-        if (["CALL-CENTER", "CALLCENTER", "CALL_CENTER", "CALL CENTER"].includes(normalizedRole)) {
-          normalizedRole = "CALLER";
-        }
+        const normalizedRole = normalizeRole(userData.role);
 
         console.log("Setting user with role:", normalizedRole);
 
@@ -183,6 +176,8 @@ export const Login = (): JSX.Element => {
             navigate("/rider/dashboard", { replace: true });
           } else if (normalizedRole === "CALLER") {
             navigate("/call-center", { replace: true });
+          } else if (normalizedRole === "VENDOR") {
+            navigate("/partner", { replace: true });
           } else {
             navigate("/parcel-search", { replace: true });
           }
@@ -208,9 +203,9 @@ export const Login = (): JSX.Element => {
   }, []);
 
   return (
-    <div className="min-h-screen w-full flex">
+    <div className="min-h-screen min-h-[100dvh] w-full overflow-x-hidden flex flex-col lg:flex-row">
       {/* LEFT SIDE - Brand Hero (Desktop Only) */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#ea690c] via-orange-600 to-orange-700 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 lg:min-h-screen bg-gradient-to-br from-[#ea690c] via-orange-600 to-orange-700 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-10 animate-float" style={{ animationDelay: '0s' }}>
             <PackageIcon className="w-32 h-32 text-white" />
@@ -282,23 +277,23 @@ export const Login = (): JSX.Element => {
       </div>
 
       {/* RIGHT SIDE - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8 bg-gray-50">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-1/2 lg:min-h-screen flex flex-1 items-start sm:items-center justify-center px-4 py-6 sm:px-6 sm:py-8 lg:p-8 bg-gray-50 overflow-y-auto">
+        <div className="w-full max-w-md min-w-0 mx-auto">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2">
+          <div className="lg:hidden flex items-center gap-2.5 sm:gap-3 mb-6 sm:mb-8 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2 shrink-0">
               <img src="/logo-1.png" alt="M&M Logo" className="w-full h-full object-contain" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-neutral-800">Mealex & Mailex</h1>
-              <p className="text-sm text-gray-500">Parcel Delivery System</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold text-neutral-800 leading-tight">Mealex & Mailex</h1>
+              <p className="text-xs sm:text-sm text-gray-500">Parcel Delivery System</p>
             </div>
           </div>
-          <Card className="border-0 shadow-xl bg-white rounded-2xl overflow-hidden">
-            <CardContent className="p-8">
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-neutral-800 mb-2">Welcome Back!</h2>
-                <p className="text-gray-500">Sign in to access your dashboard</p>
+          <Card className="border-0 shadow-xl bg-white rounded-2xl">
+            <CardContent className="p-5 sm:p-8">
+              <div className="mb-6 sm:mb-8">
+                <h2 className="text-xl sm:text-2xl font-bold text-neutral-800 mb-2">Welcome Back!</h2>
+                <p className="text-sm sm:text-base text-gray-500">Sign in to access your dashboard</p>
               </div>
 
               {error && (
@@ -323,7 +318,7 @@ export const Login = (): JSX.Element => {
                       onChange={(e) => handlePhoneChange(e.target.value)}
                       disabled={loading}
                       required
-                      className={`pl-11 pr-11 h-12 w-full rounded-xl border-2 bg-white text-neutral-800 placeholder:text-gray-400 focus:ring-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${phoneValid === true
+                      className={`pl-11 pr-11 h-11 sm:h-12 w-full min-w-0 rounded-xl border-2 bg-white text-neutral-800 placeholder:text-gray-400 focus:ring-4 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${phoneValid === true
                           ? "border-green-400 focus:border-green-500 focus:ring-green-100"
                           : phoneValid === false
                             ? "border-red-400 focus:border-red-500 focus:ring-red-100"
@@ -364,7 +359,7 @@ export const Login = (): JSX.Element => {
                       disabled={loading}
                       placeholder="Enter your password"
                       required
-                      className="pl-11 pr-12 h-12 w-full rounded-xl border-2 border-gray-200 bg-white text-neutral-800 placeholder:text-gray-400 focus:border-[#ea690c] focus:ring-4 focus:ring-orange-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="pl-11 pr-12 h-11 sm:h-12 w-full min-w-0 rounded-xl border-2 border-gray-200 bg-white text-neutral-800 placeholder:text-gray-400 focus:border-[#ea690c] focus:ring-4 focus:ring-orange-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <button
                       type="button"
@@ -384,19 +379,19 @@ export const Login = (): JSX.Element => {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c] focus:ring-offset-0 cursor-pointer"
+                      className="w-4 h-4 rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c] focus:ring-offset-0 cursor-pointer shrink-0"
                     />
                     <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors">Remember me</span>
                   </label>
                   <Link
                     to="/forgot-password"
-                    className="text-sm font-semibold text-[#ea690c] hover:text-orange-700 transition-colors"
+                    className="text-sm font-semibold text-[#ea690c] hover:text-orange-700 transition-colors sm:text-right"
                   >
                     Forgot password?
                   </Link>
@@ -405,7 +400,7 @@ export const Login = (): JSX.Element => {
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-12 bg-[#ea690c] text-white hover:bg-orange-700 rounded-xl font-semibold text-base shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2 mt-6"
+                  className="w-full h-11 sm:h-12 bg-[#ea690c] text-white hover:bg-orange-700 rounded-xl font-semibold text-sm sm:text-base shadow-lg shadow-orange-200 hover:shadow-xl hover:shadow-orange-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2 mt-4 sm:mt-6"
                 >
                   {loading ? (
                     <>
@@ -421,7 +416,7 @@ export const Login = (): JSX.Element => {
                 </Button>
               </form>
 
-              <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+              <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-100 text-center">
                 <p className="text-xs text-gray-400">
                   Version 1.0.0 · Secure API Integration
                 </p>

@@ -4,6 +4,7 @@ import { LocationProvider } from "./contexts/LocationContext";
 import { UserProvider } from "./contexts/UserContext";
 import { ParcelProvider } from "./contexts/ParcelContext";
 import { FrontdeskParcelProvider } from "./contexts/FrontdeskParcelContext";
+import { DriverTrackerProvider } from "./contexts/DriverTrackerContext";
 import { ShelfProvider } from "./contexts/ShelfContext";
 import { ToastProvider } from "./components/ui/toast";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -43,10 +44,12 @@ import { AdminFinancialDashboard } from "./screens/Admin/AdminFinancialDashboard
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
+import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
 import { OutgoingParcels } from "./screens/OutgoingParcels";
 import { IncomingParcels } from "./screens/IncomingParcels";
 import { DriverInboundReconciliation } from "./screens/DriverInboundReconciliation/DriverInboundReconciliation";
+import { DriverTrackerDetail } from "./screens/DriverInboundReconciliation/DriverTrackerDetail";
 import { SystemLogs } from "./screens/Admin/SystemLogs/SystemLogs";
 import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlist/HomeDeliveryWatchlist";
 import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
@@ -66,6 +69,7 @@ export const App = (): JSX.Element => {
           <UserProvider>
             <ParcelProvider>
               <FrontdeskParcelProvider>
+                <DriverTrackerProvider>
                 <ShelfProvider>
                   <ToastProvider>
                     <BrowserRouter>
@@ -78,9 +82,17 @@ export const App = (): JSX.Element => {
 
                         {/* Public: Customer parcel lookup (no login) */}
                         <Route path="/track" element={<TrackParcel />} />
+                        <Route path="/receive" element={<CustomerParcelHub />} />
 
-                        {/* Public: Third-party partner portal (no login required) */}
-                        <Route path="/partner/*" element={<PartnerPortal />} />
+                        {/* Vendor partner portal */}
+                        <Route
+                          path="/partner/*"
+                          element={
+                            <ProtectedRoute allowedRoles={["VENDOR"]}>
+                              <PartnerPortal />
+                            </ProtectedRoute>
+                          }
+                        />
 
                         {/* Root - Redirect to login */}
                         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -293,6 +305,16 @@ export const App = (): JSX.Element => {
                             </ProtectedRoute>
                           }
                         />
+                        <Route
+                          path="/driver-tracker/:phoneKey"
+                          element={
+                            <ProtectedRoute allowedRoles={["MANAGER", "ADMIN", "FRONTDESK"]}>
+                              <MainLayout>
+                                <DriverTrackerDetail />
+                              </MainLayout>
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/reconciliation-history" element={<Navigate to="/reconciliation" replace />} />
                         <Route
                           path="/rider-detail"
@@ -501,6 +523,7 @@ export const App = (): JSX.Element => {
                     </BrowserRouter>
                   </ToastProvider>
                 </ShelfProvider>
+                </DriverTrackerProvider>
               </FrontdeskParcelProvider>
             </ParcelProvider>
           </UserProvider>

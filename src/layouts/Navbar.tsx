@@ -161,6 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
         FRONTDESK: "Front Desk",
         RIDER: "Rider",
         CALLER: "Call Center",
+        VENDOR: "Vendor",
     };
 
     const getRoleLabel = (role: string) => {

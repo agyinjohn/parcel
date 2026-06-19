@@ -813,7 +813,7 @@ class FrontdeskService {
      * Get unpaid driver assignments (for Driver Tracker page)
      * Endpoint: GET /driver-assignments/unpaid
      */
-    async getUnpaidDriverAssignments(page: number = 0, size: number = 500): Promise<ApiResponse> {
+    async getUnpaidDriverAssignments(page: number = 0, size: number = 10000): Promise<ApiResponse> {
         try {
             const params = new URLSearchParams();
             params.append('page', page.toString());
@@ -846,6 +846,65 @@ class FrontdeskService {
                 },
             };
         }
+    }
+
+    /**
+     * Fetch unpaid driver assignments across multiple API pages (backend often caps at ~2000/page).
+     */
+    async getUnpaidDriverAssignmentsUpTo(
+        maxRecords: number = 10000,
+        requestPageSize: number = 2000,
+    ): Promise<ApiResponse> {
+        const all: unknown[] = [];
+        let page = 0;
+        let totalElements = 0;
+        let totalPages = 1;
+        let pagesFetched = 0;
+
+        while (page < totalPages && all.length < maxRecords) {
+            const size = Math.min(requestPageSize, maxRecords - all.length);
+            const result = await this.getUnpaidDriverAssignments(page, size);
+            pagesFetched++;
+
+            if (!result.success) {
+                if (all.length > 0) {
+                    return {
+                        success: true,
+                        message: 'Partial unpaid driver assignments retrieved',
+                        data: {
+                            content: all,
+                            totalElements,
+                            totalPages: 1,
+                            number: 0,
+                            size: all.length,
+                            pagesFetched,
+                        },
+                    };
+                }
+                return result;
+            }
+
+            const batch = result.data?.content || [];
+            totalElements = result.data?.totalElements ?? totalElements;
+            totalPages = result.data?.totalPages ?? 1;
+            all.push(...batch);
+
+            if (batch.length === 0) break;
+            page++;
+        }
+
+        return {
+            success: true,
+            message: 'Unpaid driver assignments retrieved successfully',
+            data: {
+                content: all,
+                totalElements,
+                totalPages: 1,
+                number: 0,
+                size: all.length,
+                pagesFetched,
+            },
+        };
     }
 
     /**
