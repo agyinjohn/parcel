@@ -5,7 +5,6 @@ import { validatePhoneNumber } from "../../../utils/dataHelpers";
 import type { GoogleCredentialPayload } from "../../../utils/googleAuth";
 import { ReceiveFooter } from "./ReceiveFooter";
 import { CustomerEmailAuthForm, type AuthMode } from "./CustomerEmailAuthForm";
-import { PwaInstallBanner } from "./PwaInstallBanner";
 import { MnmLogo } from "../../../components/MnmLogo";
 
 export type LandingTab = "account" | "find";
@@ -50,8 +49,6 @@ export const CustomerReceiveLanding = ({
   onAuthSuccess,
 }: Props) => (
   <div className="animate-in fade-in duration-300">
-    <PwaInstallBanner />
-
     <div className="flex flex-col items-center gap-3 mb-5">
       <MnmLogo className="h-14 w-14 object-contain rounded-2xl shadow-md ring-2 ring-orange-100" />
       <h1 className="text-2xl font-bold text-neutral-900 tracking-tight text-center">

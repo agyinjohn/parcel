@@ -14,6 +14,7 @@ import { ParcelDetailView, type ParcelActionSuccess } from "./components/ParcelD
 import { ParcelListStep } from "./components/ParcelListStep";
 import { ReceiveFooter } from "./components/ReceiveFooter";
 import { TrackHeader } from "./components/TrackHeader";
+import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { preloadGoogleIdentity, type GoogleCredentialPayload } from "../../utils/googleAuth";
 import { sendTrackOtp, verifyTrackOtp } from "./trackOtpMock";
 import {
@@ -323,6 +324,8 @@ export const CustomerParcelHub = (): JSX.Element => {
       />
 
       <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6">
+        <PwaInstallBanner />
+
         {step === "search" && (
           <CustomerReceiveLanding
             phone={phone}

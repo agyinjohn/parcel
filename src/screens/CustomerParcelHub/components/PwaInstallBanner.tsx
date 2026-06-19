@@ -1,10 +1,11 @@
-import { Download, Share, X } from "lucide-react";
+import { Download, MoreVertical, Share, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { MnmLogo } from "../../../components/MnmLogo";
 import { usePwaInstall } from "../../../hooks/usePwaInstall";
 
 export const PwaInstallBanner = () => {
-  const { showBanner, showInstallButton, showIosHint, installing, install, dismiss } = usePwaInstall(true);
+  const { showBanner, showInstallButton, showIosHint, showAndroidHint, installing, install, dismiss } =
+    usePwaInstall(true);
 
   if (!showBanner) return null;
 
@@ -25,7 +26,7 @@ export const PwaInstallBanner = () => {
               <Share className="w-3.5 h-3.5 shrink-0 text-[#ea690c]" />
               Tap Share, then <span className="font-medium">Add to Home Screen</span>
             </p>
-          ) : (
+          ) : showInstallButton ? (
             <Button
               type="button"
               size="sm"
@@ -36,7 +37,13 @@ export const PwaInstallBanner = () => {
               <Download className="w-3.5 h-3.5 mr-1.5" />
               {installing ? "Installing…" : "Install app"}
             </Button>
-          )}
+          ) : showAndroidHint ? (
+            <p className="text-xs text-slate-700 mt-2 flex items-center gap-1.5">
+              <MoreVertical className="w-3.5 h-3.5 shrink-0 text-[#ea690c]" />
+              Tap menu <span className="font-medium">⋮</span>, then{" "}
+              <span className="font-medium">Install app</span>
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
