@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity } from "lucide-react";
+import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity, Map as MapIcon } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
 
@@ -35,6 +35,7 @@ const navGroups: {
     {
         heading: "Delivery Operations",
         items: [
+            { label: "Rider Map",              path: "/admin/rider-map",         icon: MapIcon,         roles: BOTH },
             { label: "Delivery Income",        path: "/admin/delivery-income",   icon: HandCoins,       roles: BOTH },
             { label: "Reconciliation",         path: "/admin/reconciliation",    icon: DollarSignIcon,  roles: BOTH },
             { label: "Delivery Analytics",     path: "/admin/delivery-analytics",icon: Activity,        roles: BOTH },

@@ -2,48 +2,30 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
     PackageIcon,
     MapPinIcon,
-    ClockIcon,
     CheckCircleIcon,
     XCircleIcon,
-    ArrowRightIcon,
     Loader,
-    UserIcon,
-    TruckIcon,
     AlertCircleIcon,
-    XIcon,
     Phone,
-    DollarSignIcon,
+    Navigation,
+    RefreshCw,
+    Download,
+    Route,
 } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
+import { mapsRouteLinks, formatMinutes } from "../../utils/routePlan";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { formatPhoneNumber, formatDateTime, formatCurrency } from "../../utils/dataHelpers";
-import riderService, { RiderAssignmentResponse, AssignmentStatus, RiderParcelResponse } from "../../services/riderService";
+import { formatPhoneNumber, formatCurrency } from "../../utils/dataHelpers";
+import riderService, { RiderAssignmentResponse, AssignmentStatus } from "../../services/riderService";
 import { useToast } from "../../components/ui/toast";
 import { generateAssignmentsPDF } from "../../utils/pdfGenerator";
 import { useStation } from "../../contexts/StationContext";
-import { Download } from "lucide-react";
+import {
+    BottomSheet, CardSkeleton, EmptyState, IconAction, ParcelDetails, StatusPill,
+    destinationLabel, directionsHref, hasPin, parcelTotal, telHref, timeOf,
+} from "../../components/rider/RiderUI";
 
 type UIStatus = "assigned" | "accepted" | "picked-up" | "out-for-delivery" | "delivered" | "delivery-failed";
-
-const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
-    switch (status) {
-        case "ASSIGNED":
-            return "assigned";
-        case "ACCEPTED":
-            return "accepted";
-        case "PICKED_UP":
-            return "picked-up";
-        case "DELIVERED":
-            return "delivered";
-        case "RETURNED":
-            return "delivery-failed";
-        default:
-            return "assigned";
-    }
-};
 
 const mapUIToAssignmentStatus = (uiStatus: UIStatus): AssignmentStatus => {
     switch (uiStatus) {
@@ -64,8 +46,6 @@ const mapUIToAssignmentStatus = (uiStatus: UIStatus): AssignmentStatus => {
     }
 };
 
-// DUMMY DATA - remove when real API data is available
-
 export const RiderDashboard = (): JSX.Element => {
     const { showToast } = useToast();
     const { currentUser } = useStation();
@@ -82,6 +62,7 @@ export const RiderDashboard = (): JSX.Element => {
     const [failureReason, setFailureReason] = useState("");
     const [selectedFailureReason, setSelectedFailureReason] = useState("");
     const [updatingAssignment, setUpdatingAssignment] = useState<string | null>(null);
+    const [tab, setTab] = useState<"active" | "done">("active");
     const [pagination, setPagination] = useState({
         page: 0,
         size: 50,
@@ -119,7 +100,6 @@ export const RiderDashboard = (): JSX.Element => {
                     assignmentsList = response.data;
                 }
 
-                const hasActive = assignmentsList.some(a => !a.parcel?.delivered && !a.parcel?.cancelled && !a.parcel?.returned);
                 setAssignments(assignmentsList);
                 setPagination({
                     page: data.number !== undefined ? data.number : page,
@@ -297,13 +277,43 @@ export const RiderDashboard = (): JSX.Element => {
     // Filter assignments by parcel-level status
     // Backend assignment.status is unreliable, so we rely on parcel flags
     const activeAssignments = useMemo(() => {
-        return assignments.filter(a => {
+        const open = assignments.filter(a => {
             const isDelivered = !!a.parcel?.delivered;
             const isCancelled = !!a.parcel?.cancelled;
             const isReturned = !!a.parcel?.returned;
             return !isDelivered && !isCancelled && !isReturned;
         });
+        // Follow the planned route: planned stops in plan order (older plans first), then the rest as they came.
+        const rank = (a: RiderAssignmentResponse) => {
+            const idx = a.routePlan?.stopOrder?.indexOf(a.parcel.parcelId) ?? -1;
+            // Unpinned last, so card numbers match the "Stops 1–4" route parts.
+            return idx >= 0 ? [0, a.routePlan?.plannedAt ?? a.assignedAt ?? 0, idx] : hasPin(a.parcel) ? [1, 0, 0] : [2, 0, 0];
+        };
+        return open
+            .map((a, i) => ({ a, i, r: rank(a) }))
+            .sort((x, y) => x.r[0] - y.r[0] || x.r[1] - y.r[1] || x.r[2] - y.r[2] || x.i - y.i)
+            .map((x) => x.a);
     }, [assignments]);
+
+    // "Start route": remaining pinned stops in planned order, as Google Maps links.
+    const routeStops = useMemo(() => activeAssignments.filter((a) => hasPin(a.parcel)), [activeAssignments]);
+    const routeLinks = useMemo(() => {
+        const isMobile = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        return mapsRouteLinks(
+            routeStops.map((a) => ({ lat: a.parcel.receiverLatitude!, lng: a.parcel.receiverLongitude! })),
+            { mobile: isMobile }
+        );
+    }, [routeStops]);
+    // One plan can come back on several assignments (one per parcel), so de-duplicate by content.
+    const plans = useMemo(() => {
+        const seen = new Map<string, NonNullable<RiderAssignmentResponse["routePlan"]>>();
+        activeAssignments.forEach((a) => {
+            const pl = a.routePlan;
+            if (pl) seen.set(`${pl.plannedAt ?? ""}|${pl.stopOrder.join(",")}`, pl);
+        });
+        return Array.from(seen.values());
+    }, [activeAssignments]);
+    const unpinnedOpen = activeAssignments.length - routeStops.length;
 
     // Calculate total amount to collect from active assignments
     const totalAmountToCollect = useMemo(() => {
@@ -373,777 +383,376 @@ export const RiderDashboard = (): JSX.Element => {
         }
     };
 
-    // Get status badge based on parcel-level status fields (delivered, cancelled)
-    const getStatusBadge = (parcel: RiderParcelResponse) => {
-        let statusLabel: string;
-        let statusColor: string;
-        let borderColor: string;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-        if (parcel.cancelled) {
-            statusLabel = "Cancelled";
-            statusColor = "bg-red-100 text-red-800";
-            borderColor = "border-red-300";
-        } else if (parcel.delivered) {
-            statusLabel = "Delivered";
-            statusColor = "bg-green-100 text-green-800";
-            borderColor = "border-green-300";
-        } else {
-            // Default to "Assigned" for active parcels
-            statusLabel = "Assigned";
-            statusColor = "bg-blue-100 text-blue-800";
-            borderColor = "border-blue-300";
-        }
+    const todayAssignments = assignments.filter(a => {
+        const t = a.assignedAt ? new Date(a.assignedAt).getTime() : null;
+        return t !== null && t >= todayStart.getTime();
+    });
+    const todayDelivered = todayAssignments.filter(a => !!a.parcel?.delivered).length;
+    const todayTotal = todayAssignments.length;
+    const progressPct = todayTotal > 0 ? Math.round((todayDelivered / todayTotal) * 100) : 0;
 
-        return <Badge className={`${statusColor} ${borderColor} border font-semibold px-3 py-1 shadow-sm`}>{statusLabel}</Badge>;
+    const doneToday = assignments
+        .filter(a => (a.parcel?.delivered || a.parcel?.returned) && (a.completedAt ?? 0) >= todayStart.getTime())
+        .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+
+    const openDetails = (a: RiderAssignmentResponse) => {
+        setSelectedAssignment(a);
+        setShowDetailsModal(true);
+    };
+    const closeDetails = () => {
+        setShowDetailsModal(false);
+        setSelectedAssignment(null);
+    };
+    const startDelivered = (a: RiderAssignmentResponse) => {
+        setShowDetailsModal(false);
+        handleAssignmentStatusUpdate(a.assignmentId, "delivered", a.parcel.parcelId);
+    };
+    const startFailed = (a: RiderAssignmentResponse) => {
+        setShowDetailsModal(false);
+        handleAssignmentStatusUpdate(a.assignmentId, "delivery-failed", a.parcel.parcelId);
     };
 
-    const getNextStatusAction = (assignment: RiderAssignmentResponse) => {
-        const parcel = assignment.parcel;
-        // Only show "Mark Delivered" button if parcel is not delivered and not cancelled
-        if (!parcel.delivered && !parcel.cancelled) {
-            return { label: "Mark Delivered", status: "delivered" as UIStatus, color: "bg-green-600" };
-        }
-        return null;
-    };
-
-
-    const hour = new Date().getHours();
-        const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const todayAssignments = assignments.filter(a => {
-            const t = a.assignedAt ? new Date(a.assignedAt).getTime() : null;
-            return t !== null && t >= todayStart.getTime() && t <= todayEnd.getTime();
-        });
-
-        const todayDelivered = todayAssignments.filter(a => !!a.parcel?.delivered).length;
-        const todayTotal = todayAssignments.length;
-        const progressPct = todayTotal > 0 ? Math.round((todayDelivered / todayTotal) * 100) : 0;
+    const busy = !!selectedAssignment && updatingAssignment === selectedAssignment.assignmentId;
+    const expected = parcelTotal(selectedAssignment?.parcel);
+    const failureReady = !!selectedFailureReason && (selectedFailureReason !== "Other" || !!failureReason.trim());
 
     return (
-        <div className="w-full min-h-screen bg-gray-50 pb-10">
-            <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
-
-                {/* Greeting Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-500">{greeting},</p>
-                        <h1 className="text-2xl font-bold text-neutral-800">{currentUser?.name || "Rider"} 👋</h1>
+        <div className="space-y-4">
+            {/* Today at a glance: kept slim so the delivery list gets the screen */}
+            <section className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/[0.04]">
+                <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline justify-between text-sm">
+                            <span className="font-semibold">{todayDelivered} of {todayTotal} done today</span>
+                            <span className="text-xs text-gray-500">{progressPct}%</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-[#ea690c] transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                        </div>
                     </div>
                     <button
                         onClick={() => fetchAssignments(pagination.page, pagination.size)}
                         disabled={loading}
-                        className="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-500 hover:text-[#ea690c] hover:border-[#ea690c] transition-colors disabled:opacity-50"
-                        title="Refresh"
+                        className="h-9 w-9 shrink-0 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center active:scale-95 disabled:opacity-60"
+                        aria-label="Refresh"
                     >
-                        <Loader className={`w-4 h-4 ${loading ? "animate-spin text-[#ea690c]" : ""}`} />
+                        <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
                     </button>
                 </div>
-
-                {/* Progress Bar */}
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-neutral-700">Today's Progress</span>
-                        <span className="text-sm font-bold text-[#ea690c]">{todayDelivered} of {todayTotal} delivered</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-3">
-                        <div
-                            className="bg-gradient-to-r from-[#ea690c] to-orange-400 h-3 rounded-full transition-all duration-500"
-                            style={{ width: `${progressPct}%` }}
-                        />
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">{progressPct}% complete</p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                    <span className="whitespace-nowrap">To collect <strong className="text-neutral-900 font-semibold">{formatCurrency(totalAmountToCollect)}</strong></span>
+                    <span className="whitespace-nowrap">Collected <strong className="text-neutral-900 font-semibold">{formatCurrency(todayCollected)}</strong></span>
                 </div>
+            </section>
 
-                {/* Stats Row */}
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4">
-                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center flex-shrink-0 min-w-[100px]">
-                        <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                            <TruckIcon className="w-4 h-4 text-blue-500" />
-                        </div>
-                        <p className="text-xl font-bold text-blue-600">{activeAssignments.length}</p>
-                        <p className="text-[10px] text-gray-500 leading-tight">Active</p>
+            {/* Tabs stay pinned under the app bar while the list scrolls */}
+            <div className="sticky top-[var(--rider-bar)] transition-[top] duration-200 motion-reduce:transition-none z-30 -mx-4 px-4 py-2 -my-2 bg-[#f5f4f1]/95 backdrop-blur">
+                <div className="flex items-center gap-2">
+                    <div className="flex-1 grid grid-cols-2 p-1 rounded-2xl bg-gray-200/70">
+                        {([["active", `To deliver · ${activeAssignments.length}`], ["done", `Done today · ${doneToday.length}`]] as const).map(([key, label]) => (
+                            <button
+                                key={key}
+                                onClick={() => setTab(key)}
+                                className={`h-9 rounded-xl text-sm font-semibold transition ${tab === key ? "bg-white text-neutral-900 shadow-sm" : "text-gray-600"}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
                     </div>
-                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center flex-shrink-0 min-w-[130px]">
-                        <div className="w-8 h-8 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                            <DollarSignIcon className="w-4 h-4 text-[#ea690c]" />
-                        </div>
-                        <p className="text-sm font-bold text-[#ea690c] whitespace-nowrap">{formatCurrency(totalAmountToCollect)}</p>
-                        <p className="text-[10px] text-gray-500 leading-tight">To Collect</p>
-                    </div>
-                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center flex-shrink-0 min-w-[130px]">
-                        <div className="w-8 h-8 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-1">
-                            <CheckCircleIcon className="w-4 h-4 text-green-500" />
-                        </div>
-                        <p className="text-sm font-bold text-green-600 whitespace-nowrap">{formatCurrency(todayCollected)}</p>
-                        <p className="text-[10px] text-gray-500 leading-tight">Collected</p>
-                    </div>
-                </div>
-
-                {/* Active Assignments */}
-                <div>
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-base font-bold text-neutral-800">Active Assignments
-                            <span className="ml-2 bg-[#ea690c] text-white text-xs font-semibold px-2 py-0.5 rounded-full">{activeAssignments.length}</span>
-                        </h2>
-                        {activeAssignments.length > 0 && (
-                            <Button onClick={handleDownloadPDF} variant="outline" className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 text-xs px-3 py-1.5 h-auto flex items-center gap-1.5">
-                                <Download className="w-3.5 h-3.5" /> Download
-                            </Button>
-                        )}
-                    </div>
-
-                    {loading ? (
-                        <Card className="rounded-xl border-0 bg-white shadow-lg">
-                            <CardContent className="p-12 text-center">
-                                <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                                <p className="text-neutral-700 font-semibold text-lg">Loading assignments...</p>
-                                <p className="text-sm text-gray-500 mt-2">Please wait</p>
-                            </CardContent>
-                        </Card>
-                    ) : activeAssignments.length === 0 ? (
-                        <Card className="rounded-xl border-0 bg-white shadow-lg">
-                            <CardContent className="p-12 text-center">
-                                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <PackageIcon className="w-10 h-10 text-gray-400" />
-                                </div>
-                                <p className="text-neutral-800 font-semibold text-lg mb-2">No active assignments</p>
-                                <p className="text-sm text-gray-500">
-                                    Check back later for new assignments
-                                </p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <Card className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Recipient</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Phone</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Location</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Amount</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Status</th>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white">
-                                        {activeAssignments.map((assignment, index) => {
-                                            const nextAction = getNextStatusAction(assignment);
-                                            const parcel = assignment.parcel;
-                                            const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                                                (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-
-                                            return (
-                                                <tr
-                                                    key={assignment.assignmentId}
-                                                    className={`hover:bg-gray-50 transition-colors ${index !== activeAssignments.length - 1 ? 'border-b border-gray-200' : ''}`}
-                                                >
-                                                    <td className="px-4 py-4 border-r border-gray-100">
-                                                        <div className="text-sm font-semibold text-neutral-800">
-                                                            {parcel.receiverName || "N/A"}
-                                                        </div>
-                                                        {parcel.parcelDescription && (
-                                                            <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">
-                                                                {parcel.parcelDescription}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                        {parcel.recieverPhoneNumber ? (
-                                                            <a
-                                                                href={`tel:${parcel.recieverPhoneNumber}`}
-                                                                className="text-sm text-[#ea690c] hover:underline font-medium"
-                                                            >
-                                                                {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                                                            </a>
-                                                        ) : (
-                                                            <span className="text-sm text-gray-400">N/A</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-4 border-r border-gray-100">
-                                                        <div className="text-sm text-neutral-700">
-                                                            {parcel.receiverAddress ? (
-                                                                <div className="flex items-start gap-1">
-                                                                    <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                                                    <span className="truncate max-w-[200px]" title={parcel.receiverAddress}>
-                                                                        {parcel.receiverAddress}
-                                                                    </span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-gray-400">N/A</span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                        <div className="text-sm font-bold text-[#ea690c]">
-                                                            {formatCurrency(totalAmount)}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                        {getStatusBadge(parcel)}
-                                                    </td>
-                                                    <td className="px-4 py-4 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2">
-                                                            {parcel.recieverPhoneNumber && (
-                                                                <Button
-                                                                    onClick={() => window.location.href = `tel:${parcel.recieverPhoneNumber}`}
-                                                                    variant="outline"
-                                                                    className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
-                                                                    title={`Call ${parcel.receiverName || 'recipient'}`}
-                                                                >
-                                                                    <Phone className="w-3.5 h-3.5" />
-                                                                </Button>
-                                                            )}
-                                                            <Button
-                                                                onClick={() => {
-                                                                    setSelectedAssignment(assignment);
-                                                                    setShowDetailsModal(true);
-                                                                }}
-                                                                variant="outline"
-                                                                className="border-gray-300 text-gray-700 hover:bg-gray-50 text-xs px-3 py-1.5"
-                                                            >
-                                                                View Details
-                                                            </Button>
-                                                            {nextAction && (
-                                                                <Button
-                                                                    onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, nextAction.status, parcel.parcelId)}
-                                                                    disabled={updatingAssignment === assignment.assignmentId}
-                                                                    className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50 text-xs px-3 py-1.5`}
-                                                                >
-                                                                    {updatingAssignment === assignment.assignmentId ? (
-                                                                        <Loader className="w-3 h-3 animate-spin" />
-                                                                    ) : (
-                                                                        nextAction.label
-                                                                    )}
-                                                                </Button>
-                                                            )}
-                                                            <Button
-                                                                onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, "delivery-failed", parcel.parcelId)}
-                                                                variant="outline"
-                                                                className="border-red-300 text-red-600 hover:bg-red-50 text-xs px-3 py-1.5"
-                                                            >
-                                                                Mark Failed
-                                                            </Button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Pagination */}
-                            {!loading && pagination.totalPages > 1 && (
-                                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                                    <div className="text-sm text-neutral-700">
-                                        Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements} assignments
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                                            disabled={pagination.page === 0 || loading}
-                                            variant="outline"
-                                            size="sm"
-                                            className="border border-gray-300"
-                                        >
-                                            Previous
-                                        </Button>
-                                        <Button
-                                            onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                                            disabled={pagination.page >= pagination.totalPages - 1 || loading}
-                                            variant="outline"
-                                            size="sm"
-                                            className="border border-gray-300"
-                                        >
-                                            Next
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
-                        </Card>
+                    {activeAssignments.length > 0 && (
+                        <button
+                            onClick={handleDownloadPDF}
+                            className="h-11 w-11 shrink-0 rounded-2xl bg-white border border-gray-200 text-gray-700 flex items-center justify-center active:scale-95"
+                            aria-label="Download route sheet"
+                            title="Download route sheet (PDF)"
+                        >
+                            <Download className="w-5 h-5" />
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Delivery Confirmation Modal */}
-            {showDeliveryModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-                    <Card className="w-full sm:max-w-md border border-[#d1d1d1] bg-white shadow-lg rounded-t-2xl sm:rounded-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col">
-                        <CardContent className="p-4 sm:p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
-                            {/* Fixed Header */}
-                            <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
-                                <h3 className="text-lg font-bold text-neutral-800">Confirm Delivery</h3>
-                                <button
-                                    onClick={() => {
-                                        setShowDeliveryModal(false);
-                                        setSelectedAssignment(null);
-                                        setAmountCollected("");
-                                        setConfirmationCode("");
-                                        setPaymentMethod("");
-                                    }}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
-                                >
-                                    <XIcon className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            {/* Scrollable Content */}
-                            <div className="space-y-4 flex-1 overflow-y-auto overflow-x-hidden pr-1 -mr-1">
-                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4 mb-4">
-                                    <div className="flex items-start gap-2">
-                                        <AlertCircleIcon className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                                        <div>
-                                            <p className="text-sm font-semibold text-yellow-900 mb-1">Are you sure?</p>
-                                            <p className="text-xs text-yellow-800">
-                                                Please confirm that you have successfully delivered this parcel to the recipient.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="text-sm text-[#5d5d5d] mb-1">Recipient</p>
-                                    <p className="font-semibold text-neutral-800">{selectedAssignment.parcel.receiverName || "N/A"}</p>
-                                </div>
-
-                                <div className="bg-gray-50 rounded-lg p-3">
-                                    <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Expected Amount</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-[#ea690c]">
-                                        {formatCurrency(
-                                            (selectedAssignment.parcel.deliveryCost || 0) + (selectedAssignment.parcel.pickUpCost || 0) +
-                                            (selectedAssignment.parcel.inboundCost || 0) + (selectedAssignment.parcel.storageCost || 0)
-                                        )}
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                        Amount Collected (GHC) <span className="text-[#e22420]">*</span>
-                                    </Label>
-                                    <Input
-                                        type="number"
-                                        value={amountCollected}
-                                        onChange={(e) => setAmountCollected(e.target.value)}
-                                        placeholder="0.00"
-                                        className="w-full"
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                        Payment Method <span className="text-[#e22420]">*</span>
-                                    </Label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {[{ value: "cash", label: "💵 Cash" }, { value: "momo", label: "📱 Mobile Money" }].map(opt => (
-                                            <button
-                                                key={opt.value}
-                                                type="button"
-                                                onClick={() => setPaymentMethod(opt.value)}
-                                                className={`py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                                                    paymentMethod === opt.value
-                                                        ? "border-[#ea690c] bg-orange-50 text-[#ea690c]"
-                                                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-                                                }`}
-                                            >
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                        Confirmation Code (Optional)
-                                    </Label>
-                                    <Input
-                                        type="text"
-                                        value={confirmationCode}
-                                        onChange={(e) => setConfirmationCode(e.target.value.toUpperCase())}
-                                        placeholder="Enter confirmation code (optional)"
-                                        className="w-full uppercase"
-                                        maxLength={10}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Fixed Footer with Buttons */}
-                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 mt-4 border-t border-gray-200 flex-shrink-0">
-                                <Button
-                                    onClick={() => {
-                                        setShowDeliveryModal(false);
-                                        setSelectedAssignment(null);
-                                        setAmountCollected("");
-                                        setConfirmationCode("");
-                                        setPaymentMethod("");
-                                    }}
-                                    variant="outline"
-                                    className="flex-1 border border-[#d1d1d1] py-2.5 sm:py-2"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    onClick={handleDeliveryComplete}
-                                    disabled={!amountCollected || !paymentMethod || updatingAssignment === selectedAssignment.assignmentId}
-                                    className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 py-2.5 sm:py-2"
-                                >
-                                    {updatingAssignment === selectedAssignment.assignmentId ? (
-                                        <>
-                                            <Loader className="w-4 h-4 animate-spin mr-2" />
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircleIcon className="w-4 h-4 mr-2" />
-                                            Confirm Delivery
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+            {tab === "active" && routeStops.length > 0 && (
+                <section className="rounded-2xl bg-white px-3.5 py-3 shadow-sm ring-1 ring-black/[0.04]">
+                    <div className="flex items-center gap-3">
+                        <span className="h-8 w-8 shrink-0 rounded-xl bg-orange-50 text-[#ea690c] flex items-center justify-center">
+                            <Route className="w-[18px] h-[18px]" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-sm">
+                                {plans.length > 0 ? "Planned route" : "Your route"} · {routeStops.length} stop{routeStops.length === 1 ? "" : "s"} left
+                            </p>
+                            <p className="text-xs text-gray-500">
+                                {plans.length === 1 && plans[0]
+                                    ? `Whole plan ${plans[0].totalKm.toFixed(1)} km · about ${formatMinutes(plans[0].totalMinutes)} riding`
+                                    : plans.length > 1 ? `${plans.length} plans from different assignments` : "In the order shown below"}
+                                {unpinnedOpen > 0 && ` · ${unpinnedOpen} without a pin at the end`}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        className={`mt-2.5 grid gap-2 ${routeLinks.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
+                        title={routeLinks.length > 1 ? "Google Maps takes a few stops per trip, so the route opens in parts." : undefined}
+                    >
+                        {routeLinks.map((l) => (
+                            <a
+                                key={l.from}
+                                href={l.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="h-9 rounded-xl bg-neutral-900 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                            >
+                                <Navigation className="w-4 h-4" />
+                                {routeLinks.length === 1 ? "Start route" : `Stops ${l.from}–${l.to}`}
+                            </a>
+                        ))}
+                    </div>
+                </section>
             )}
 
-            {/* Parcel Details Modal */}
-            {showDetailsModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-2xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-neutral-800">Parcel Details</h3>
-                                <button
-                                    onClick={() => {
-                                        setShowDetailsModal(false);
-                                        setSelectedAssignment(null);
-                                    }}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
-                                >
-                                    <XIcon className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            {selectedAssignment && (() => {
-                                const parcel = selectedAssignment.parcel;
-                                const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                                    (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                                const nextAction = getNextStatusAction(selectedAssignment);
-
-                                return (
-                                    <div className="space-y-6">
-                                        {/* Header */}
-                                        <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
-                                            <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 text-sm font-semibold px-3 py-1 shadow-sm">
-                                                {parcel.parcelId}
-                                            </Badge>
-                                            {getStatusBadge(selectedAssignment.parcel)}
-                                        </div>
-
-                                        {/* Recipient Information */}
-                                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                                            <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
-                                                <UserIcon className="w-4 h-4" />
-                                                Recipient Information
-                                            </h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <div>
-                                                    <p className="text-xs text-gray-600 mb-1">Name</p>
-                                                    <p className="text-sm font-semibold text-neutral-800">{parcel.receiverName || "N/A"}</p>
-                                                </div>
-                                                {parcel.recieverPhoneNumber && (
-                                                    <div>
-                                                        <p className="text-xs text-gray-600 mb-1">Phone</p>
-                                                        <a
-                                                            href={`tel:${parcel.recieverPhoneNumber}`}
-                                                            className="text-sm font-semibold text-[#ea690c] hover:underline"
-                                                        >
-                                                            {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                                                        </a>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Delivery Address */}
-                                        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                                            <h4 className="text-sm font-bold text-green-900 mb-3 flex items-center gap-2">
-                                                <MapPinIcon className="w-4 h-4" />
-                                                Delivery Address
-                                            </h4>
-                                            <p className="text-sm text-neutral-800">
-                                                {parcel.receiverAddress || "N/A"}
-                                            </p>
-                                        </div>
-
-                                        {/* Sender Information */}
-                                        {(parcel.senderName || parcel.senderPhoneNumber) && (
-                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                                    <UserIcon className="w-4 h-4" />
-                                                    Sender Information
-                                                </h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {parcel.senderName && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-600 mb-1">Name</p>
-                                                            <p className="text-sm font-semibold text-neutral-800">{parcel.senderName}</p>
-                                                        </div>
-                                                    )}
-                                                    {parcel.senderPhoneNumber && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-600 mb-1">Phone</p>
-                                                            <a
-                                                                href={`tel:${parcel.senderPhoneNumber}`}
-                                                                className="text-sm font-semibold text-[#ea690c] hover:underline"
-                                                            >
-                                                                {formatPhoneNumber(parcel.senderPhoneNumber)}
-                                                            </a>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Item Description */}
-                                        {parcel.parcelDescription && (
-                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-2">Item Description</h4>
-                                                <p className="text-sm text-neutral-800">{parcel.parcelDescription}</p>
-                                                {parcel.fragile && (
-                                                    <Badge className="mt-2 bg-red-100 text-red-800 border-red-200">
-                                                        Fragile
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Amount Breakdown */}
-                                        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
-                                            <h4 className="text-sm font-bold text-orange-900 mb-3 flex items-center gap-2">
-                                                <TruckIcon className="w-4 h-4" />
-                                                Amount to Collect
-                                            </h4>
-                                            <div className="space-y-2 bg-white/60 rounded-lg p-3">
-                                                {(parcel.inboundCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Item Value:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.inboundCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.deliveryCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Delivery Fee:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.deliveryCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.pickUpCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Pickup Cost:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.pickUpCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.storageCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Storage:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.storageCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between pt-2 border-t-2 border-orange-200">
-                                                    <span className="text-base font-bold text-orange-900">Total:</span>
-                                                    <span className="text-xl font-bold text-[#ea690c]">
-                                                        {formatCurrency(totalAmount)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Assignment Info */}
-                                        {selectedAssignment.assignedAt && (
-                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
-                                                    <ClockIcon className="w-4 h-4" />
-                                                    Assignment Information
-                                                </h4>
-                                                <p className="text-xs text-gray-600">
-                                                    Assigned: {formatDateTime(new Date(selectedAssignment.assignedAt).toISOString())}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Action Buttons */}
-                                        <div className="flex flex-col gap-3 pt-4 border-t-2 border-gray-100">
-                                            {nextAction && (
-                                                <Button
-                                                    onClick={() => {
-                                                        setShowDetailsModal(false);
-                                                        handleAssignmentStatusUpdate(selectedAssignment.assignmentId, nextAction.status, parcel.parcelId);
-                                                    }}
-                                                    disabled={updatingAssignment === selectedAssignment.assignmentId}
-                                                    className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50 w-full shadow-lg hover:shadow-xl transition-all duration-200 font-semibold py-3`}
-                                                >
-                                                    {updatingAssignment === selectedAssignment.assignmentId ? (
-                                                        <>
-                                                            <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                            Updating...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            {nextAction.label}
-                                                            <ArrowRightIcon className="w-4 h-4 ml-2" />
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            )}
-
-                                            <Button
-                                                onClick={() => {
-                                                    setShowDetailsModal(false);
-                                                    handleAssignmentStatusUpdate(selectedAssignment.assignmentId, "delivery-failed", parcel.parcelId);
-                                                }}
-                                                variant="outline"
-                                                className="border-2 border-red-300 text-red-600 hover:bg-red-50 w-full font-semibold py-3 shadow-md hover:shadow-lg transition-all"
-                                            >
-                                                <XCircleIcon className="w-4 h-4 mr-2" />
-                                                Mark as Failed
-                                            </Button>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-
-            {/* Delivery Failed Modal */}
-            {showFailedModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-                    <Card className="w-full sm:max-w-md border border-[#d1d1d1] bg-white shadow-lg rounded-t-2xl sm:rounded-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col">
-                        <CardContent className="p-4 sm:p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
-                            {/* Fixed Header */}
-                            <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
-                                <h3 className="text-lg font-bold text-neutral-800">Mark Delivery as Failed</h3>
-                                <button
-                                    onClick={() => {
-                                        setShowFailedModal(false);
-                                        setSelectedAssignment(null);
-                                        setFailureReason("");
-                                        setSelectedFailureReason("");
-                                        setPaymentMethod("");
-                                    }}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
-                                >
-                                    <XIcon className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            {/* Scrollable Content */}
-                            <div className="space-y-4 flex-1 overflow-y-auto overflow-x-hidden pr-1 -mr-1">
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4 mb-4">
-                                    <div className="flex items-start gap-2">
-                                        <AlertCircleIcon className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                                        <div>
-                                            <p className="text-sm font-semibold text-red-900 mb-1">Are you sure?</p>
-                                            <p className="text-xs text-red-800">
-                                                Please confirm that this delivery has failed and provide a reason. This action cannot be undone.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <p className="text-sm text-[#5d5d5d] mb-1">Recipient</p>
-                                    <p className="font-semibold text-neutral-800">{selectedAssignment.parcel.receiverName || "N/A"}</p>
-                                </div>
-
-                                <div>
-                                    <p className="text-sm text-[#5d5d5d] mb-1">Parcel ID</p>
-                                    <p className="font-semibold text-neutral-800">{selectedAssignment.parcel.parcelId}</p>
-                                </div>
-
-                                <div>
-                                    <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                        Failure Reason <span className="text-[#e22420]">*</span>
-                                    </Label>
-                                    <select
-                                        value={selectedFailureReason}
-                                        onChange={(e) => {
-                                            setSelectedFailureReason(e.target.value);
-                                            if (e.target.value !== "Other") {
-                                                setFailureReason("");
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c] bg-white"
+            {loading && assignments.length === 0 ? (
+                <CardSkeleton />
+            ) : tab === "active" ? (
+                activeAssignments.length === 0 ? (
+                    <EmptyState icon={<PackageIcon className="w-8 h-8" />} title="No deliveries right now" hint="New assignments will show up here." />
+                ) : (
+                    <ul className="space-y-2">
+                        {activeAssignments.map((a, i) => {
+                            const p = a.parcel;
+                            return (
+                                <li key={`${a.assignmentId}-${p.parcelId}`}>
+                                    <article
+                                        onClick={() => openDetails(a)}
+                                        className="rounded-2xl bg-white px-3.5 py-3 shadow-sm ring-1 ring-black/[0.04] active:bg-gray-50 cursor-pointer"
                                     >
-                                        <option value="">Select a reason</option>
-                                        {failureReasons.map((reason) => (
-                                            <option key={reason} value={reason}>
-                                                {reason}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {selectedFailureReason === "Other" && (
-                                        <div className="mt-3">
-                                            <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                                Please specify <span className="text-[#e22420]">*</span>
-                                            </Label>
-                                            <textarea
-                                                value={failureReason}
-                                                onChange={(e) => setFailureReason(e.target.value)}
-                                                placeholder="Enter reason for delivery failure..."
-                                                className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c] resize-none"
-                                                rows={4}
-                                            />
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="h-6 w-6 shrink-0 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold flex items-center justify-center">
+                                                {i + 1}
+                                            </span>
+                                            <h3 className="min-w-0 flex-1 font-semibold truncate">{p.receiverName || "Unknown recipient"}</h3>
+                                            {p.pod && <StatusPill tone="neutral">POD</StatusPill>}
+                                            {p.fragile && <StatusPill tone="pending">Fragile</StatusPill>}
+                                            <span className="shrink-0 font-semibold text-sm">{formatCurrency(parcelTotal(p))}</span>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
+                                        <p className="flex items-center gap-1.5 text-sm text-gray-600 mt-1 pl-[34px]">
+                                            <MapPinIcon className={`w-3.5 h-3.5 shrink-0 ${hasPin(p) ? "text-[#ea690c]" : "text-gray-400"}`} />
+                                            <span className="truncate">{destinationLabel(p) || "No address given"}</span>
+                                        </p>
 
-                            {/* Fixed Footer with Buttons */}
-                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 mt-4 border-t border-gray-200 flex-shrink-0">
-                                <Button
-                                    onClick={() => {
-                                        setShowFailedModal(false);
-                                        setSelectedAssignment(null);
-                                        setFailureReason("");
-                                        setSelectedFailureReason("");
-                                    }}
-                                    variant="outline"
-                                    className="flex-1 border border-[#d1d1d1] py-2.5 sm:py-2"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    onClick={handleDeliveryFailed}
-                                    disabled={
-                                        (!selectedFailureReason || (selectedFailureReason === "Other" && !failureReason.trim()))
-                                        || updatingAssignment === selectedAssignment.assignmentId
-                                    }
-                                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 py-2.5 sm:py-2"
-                                >
-                                    {updatingAssignment === selectedAssignment.assignmentId ? (
-                                        <>
-                                            <Loader className="w-4 h-4 animate-spin mr-2" />
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <XCircleIcon className="w-4 h-4 mr-2" />
-                                            Confirm Failure
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                        <div className="flex items-center gap-2 mt-2.5">
+                                            <IconAction href={telHref(p.recieverPhoneNumber)} label="Call recipient">
+                                                <Phone className="w-[18px] h-[18px]" />
+                                            </IconAction>
+                                            <IconAction href={directionsHref(p)} label={hasPin(p) ? "Directions to the drop-off pin" : "Search the address in Maps"}>
+                                                <Navigation className="w-[18px] h-[18px]" />
+                                            </IconAction>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); startFailed(a); }}
+                                                className="h-10 w-10 shrink-0 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center active:scale-95"
+                                                aria-label="Delivery failed"
+                                                title="Delivery failed"
+                                            >
+                                                <XCircleIcon className="w-[18px] h-[18px]" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); startDelivered(a); }}
+                                                disabled={updatingAssignment === a.assignmentId}
+                                                className="h-10 flex-1 rounded-xl bg-[#ea690c] text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-60"
+                                            >
+                                                <CheckCircleIcon className="w-4 h-4" /> Delivered
+                                            </button>
+                                        </div>
+                                    </article>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )
+            ) : doneToday.length === 0 ? (
+                <EmptyState icon={<CheckCircleIcon className="w-8 h-8" />} title="Nothing completed yet today" hint="Deliveries you finish today appear here." />
+            ) : (
+                <ul className="rounded-3xl bg-white divide-y divide-gray-100 overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+                    {doneToday.map((a) => {
+                        const p = a.parcel;
+                        const failed = !!p.returned;
+                        return (
+                            <li key={`${a.assignmentId}-${p.parcelId}`}>
+                                <button onClick={() => openDetails(a)} className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-gray-50">
+                                    <span className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center bg-gray-100 ${failed ? "text-red-600" : "text-gray-500"}`}>
+                                        {failed ? <XCircleIcon className="w-5 h-5" /> : <CheckCircleIcon className="w-5 h-5" />}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium truncate">{p.receiverName || "Unknown recipient"}</p>
+                                        <p className="text-xs text-gray-500 truncate">
+                                            {timeOf(a.completedAt)}{a.paymentMethod ? ` · ${a.paymentMethod === "momo" ? "MoMo" : "Cash"}` : ""}{failed ? " · Returned" : ""}
+                                        </p>
+                                    </div>
+                                    <span className={`font-semibold text-sm ${failed ? "text-gray-400 line-through" : ""}`}>{formatCurrency(parcelTotal(p))}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+
+            {pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between text-sm">
+                    <button
+                        onClick={() => setPagination(prev => ({ ...prev, page: Math.max(0, prev.page - 1) }))}
+                        disabled={pagination.page === 0 || loading}
+                        className="h-10 px-4 rounded-xl bg-white border border-gray-200 disabled:opacity-40"
+                    >
+                        Previous
+                    </button>
+                    <span className="text-gray-500">Page {pagination.page + 1} of {pagination.totalPages}</span>
+                    <button
+                        onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.totalPages - 1, prev.page + 1) }))}
+                        disabled={pagination.page >= pagination.totalPages - 1 || loading}
+                        className="h-10 px-4 rounded-xl bg-white border border-gray-200 disabled:opacity-40"
+                    >
+                        Next
+                    </button>
                 </div>
             )}
+
+            {/* Parcel details */}
+            <BottomSheet
+                open={showDetailsModal && !!selectedAssignment}
+                onClose={closeDetails}
+                title={selectedAssignment?.parcel.receiverName || "Parcel details"}
+                subtitle={selectedAssignment?.parcel.parcelDescription}
+                footer={selectedAssignment && !selectedAssignment.parcel.delivered && !selectedAssignment.parcel.returned && !selectedAssignment.parcel.cancelled ? (
+                    <div className="flex gap-2">
+                        <button onClick={() => startFailed(selectedAssignment)} className="h-12 px-5 rounded-2xl bg-gray-100 text-gray-700 font-semibold">
+                            Failed
+                        </button>
+                        <button onClick={() => startDelivered(selectedAssignment)} className="h-12 flex-1 rounded-2xl bg-[#ea690c] text-white font-semibold">
+                            Mark delivered
+                        </button>
+                    </div>
+                ) : undefined}
+            >
+                {selectedAssignment && <ParcelDetails assignment={selectedAssignment} />}
+            </BottomSheet>
+
+            {/* Confirm delivery */}
+            <BottomSheet
+                open={showDeliveryModal && !!selectedAssignment}
+                onClose={() => { setShowDeliveryModal(false); setSelectedAssignment(null); }}
+                title="Confirm delivery"
+                subtitle={selectedAssignment ? `${selectedAssignment.parcel.receiverName || "Recipient"} · ${selectedAssignment.parcel.parcelId}` : undefined}
+                footer={
+                    <button
+                        onClick={handleDeliveryComplete}
+                        disabled={!amountCollected || !paymentMethod || busy}
+                        className="w-full h-12 rounded-2xl bg-[#ea690c] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {busy ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircleIcon className="w-5 h-5" />}
+                        {busy ? "Saving..." : "Confirm delivered"}
+                    </button>
+                }
+            >
+                <div className="space-y-5">
+                    <div className="rounded-2xl bg-gray-50 p-4 flex items-center justify-between">
+                        <span className="text-sm text-gray-700">Amount due</span>
+                        <span className="text-2xl font-bold">{formatCurrency(expected)}</span>
+                    </div>
+
+                    <div>
+                        <Label className="text-sm font-semibold">Amount collected (GHC)</Label>
+                        <Input
+                            type="number"
+                            inputMode="decimal"
+                            value={amountCollected}
+                            onChange={(e) => setAmountCollected(e.target.value)}
+                            placeholder="0.00"
+                            className="mt-1.5 h-12 rounded-2xl text-lg"
+                        />
+                        {amountCollected && parseFloat(amountCollected) !== expected && (
+                            <p className="text-xs text-amber-700 mt-1.5 flex items-center gap-1">
+                                <AlertCircleIcon className="w-3.5 h-3.5" /> Differs from the amount due
+                            </p>
+                        )}
+                    </div>
+
+                    <div>
+                        <Label className="text-sm font-semibold">Payment method</Label>
+                        <div className="grid grid-cols-2 gap-2 mt-1.5">
+                            {[{ value: "cash", label: "Cash" }, { value: "momo", label: "Mobile money" }].map(opt => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setPaymentMethod(opt.value)}
+                                    className={`h-12 rounded-2xl border-2 text-sm font-semibold transition ${
+                                        paymentMethod === opt.value ? "border-neutral-900 text-neutral-900" : "border-gray-200 text-gray-600"
+                                    }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label className="text-sm font-semibold">Confirmation code <span className="font-normal text-gray-500">(optional)</span></Label>
+                        <Input
+                            type="text"
+                            value={confirmationCode}
+                            onChange={(e) => setConfirmationCode(e.target.value.toUpperCase())}
+                            placeholder="Code from the recipient"
+                            className="mt-1.5 h-12 rounded-2xl uppercase tracking-widest"
+                            maxLength={10}
+                        />
+                    </div>
+                </div>
+            </BottomSheet>
+
+            {/* Delivery failed */}
+            <BottomSheet
+                open={showFailedModal && !!selectedAssignment}
+                onClose={() => { setShowFailedModal(false); setSelectedAssignment(null); }}
+                title="Delivery failed"
+                subtitle={selectedAssignment ? `${selectedAssignment.parcel.receiverName || "Recipient"} · ${selectedAssignment.parcel.parcelId}` : undefined}
+                footer={
+                    <button
+                        onClick={handleDeliveryFailed}
+                        disabled={!failureReady || busy}
+                        className="w-full h-12 rounded-2xl bg-red-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {busy ? <Loader className="w-4 h-4 animate-spin" /> : <XCircleIcon className="w-5 h-5" />}
+                        {busy ? "Saving..." : "Return parcel to station"}
+                    </button>
+                }
+            >
+                <p className="text-sm text-gray-600 mb-3">What went wrong?</p>
+                <div className="space-y-2">
+                    {failureReasons.map((reason) => (
+                        <button
+                            key={reason}
+                            type="button"
+                            onClick={() => { setSelectedFailureReason(reason); if (reason !== "Other") setFailureReason(""); }}
+                            className={`w-full text-left px-4 h-12 rounded-2xl border-2 text-sm font-medium transition ${
+                                selectedFailureReason === reason ? "border-neutral-900 text-neutral-900" : "border-gray-200 text-gray-700"
+                            }`}
+                        >
+                            {reason}
+                        </button>
+                    ))}
+                </div>
+                {selectedFailureReason === "Other" && (
+                    <textarea
+                        value={failureReason}
+                        onChange={(e) => setFailureReason(e.target.value)}
+                        placeholder="Describe what happened"
+                        className="mt-3 w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-neutral-900 resize-none text-sm"
+                        rows={3}
+                        autoFocus
+                    />
+                )}
+            </BottomSheet>
         </div>
     );
 };
-

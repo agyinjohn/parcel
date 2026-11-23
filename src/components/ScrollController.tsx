@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 export const ScrollController = () => {
+    const { pathname } = useLocation();
     const [scrollY, setScrollY] = useState(0);
     const [docHeight, setDocHeight] = useState(0);
 
@@ -23,8 +25,9 @@ export const ScrollController = () => {
     const atTop = scrollY <= 10;
     const atBottom = docHeight > 0 && scrollY >= docHeight - 10;
 
-    // Hide when page isn't scrollable
-    if (docHeight < 100) return null;
+    // Hide when page isn't scrollable, and in the rider app, where riders
+    // scroll by touch and the buttons would cover the bottom tab bar.
+    if (docHeight < 100 || pathname.startsWith("/rider")) return null;
 
     return (
         <div className="fixed bottom-6 right-5 z-50 flex flex-col gap-1.5">

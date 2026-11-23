@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   MapPinIcon,
   PackageIcon,
@@ -15,6 +15,8 @@ import { Textarea } from "../../components/ui/textarea";
 import { useToast } from "../../components/ui/toast";
 import { validatePhoneNumber, normalizePhoneNumber } from "../../utils/dataHelpers";
 import authService from "../../services/authService";
+import { useStation } from "../../contexts/StationContext";
+import { useLocation as useLocations } from "../../contexts/LocationContext";
 import frontdeskService, { type ParcelRequest } from "../../services/frontdeskService";
 
 export interface PickupRequestFormData {
@@ -48,6 +50,24 @@ const initialFormState: PickupRequestFormData = {
 export const PickupRequest = (): JSX.Element => {
   const { showToast } = useToast();
   const [form, setForm] = useState<PickupRequestFormData>(initialFormState);
+
+  // Station pickup charge (handoff Part J). undefined = not configured yet (older backend):
+  // keep the manual box. false = this station doesn't charge. true = pre-fill the amount.
+  const { userOfficeId } = useStation();
+  const { stations } = useLocations();
+  const station = stations.find((st) => st.id === userOfficeId);
+  const chargeMode: "manual" | "off" | "on" =
+    station?.pickupChargeEnabled === true ? "on" : station?.pickupChargeEnabled === false ? "off" : "manual";
+  const stationCharge = chargeMode === "on" ? Number(station?.pickupChargeAmount ?? 0) : undefined;
+  const freshForm = (): PickupRequestFormData => ({
+    ...initialFormState,
+    pickupCost: chargeMode === "on" ? stationCharge : chargeMode === "off" ? 0 : undefined,
+  });
+  useEffect(() => {
+    // Apply the station default once settings load, unless staff already typed an amount.
+    setForm((f) => (f.pickupCost === undefined || chargeMode === "off" ? { ...f, pickupCost: freshForm().pickupCost } : f));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeMode, stationCharge]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -167,7 +187,7 @@ export const PickupRequest = (): JSX.Element => {
       if (response.success) {
         showToast("Pickup request submitted successfully. A rider will be assigned for collection.", "success");
         setSubmitSuccess(true);
-        setForm(initialFormState);
+        setForm(freshForm());
       } else {
         showToast(response.message || "Failed to submit pickup request", "error");
       }
@@ -180,7 +200,7 @@ export const PickupRequest = (): JSX.Element => {
   };
 
   const handleReset = () => {
-    setForm(initialFormState);
+    setForm(freshForm());
     setSubmitSuccess(false);
   };
 
@@ -337,6 +357,11 @@ export const PickupRequest = (): JSX.Element => {
                     <h2 className="text-sm font-semibold text-neutral-800">Costs</h2>
                     <p className="text-xs text-gray-500 mt-0.5">Leave blank if to be determined later</p>
                   </div>
+                  {chargeMode === "off" ? (
+                    <div className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                      This station doesn't charge for pickups.
+                    </div>
+                  ) : (
                   <div>
                     <Label htmlFor="pickupCost" className="text-xs font-medium text-neutral-700">Pickup Cost (GHC)</Label>
                     <CostInput
@@ -348,7 +373,15 @@ export const PickupRequest = (): JSX.Element => {
                       className="mt-1"
                       inputClassName="border border-[#d1d1d1] h-9 text-sm"
                     />
+                    {chargeMode === "on" && (
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {form.pickupCost === stationCharge
+                          ? `Station pickup charge (GHC ${stationCharge!.toFixed(2)}), set in Branch Settings. You can change it for this request.`
+                          : `Changed from the station charge of GHC ${stationCharge!.toFixed(2)}.`}
+                      </p>
+                    )}
                   </div>
+                  )}
                   <div>
                     <Label htmlFor="deliveryCost" className="text-xs font-medium text-neutral-700">Delivery Cost (GHC)</Label>
                     <CostInput

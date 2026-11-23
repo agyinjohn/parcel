@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { Fuel, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Fuel, FileText, CheckCircle, XCircle, Clock, Plus } from 'lucide-react';
+import { BottomSheet, EmptyState, StatusPill } from '../../components/rider/RiderUI';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../../config/api';
 import authService from '../../services/authService';
 import { useToast } from '../../components/ui/toast';
-import { normalizePhoneNumber, validatePhoneNumber } from '../../utils/dataHelpers';
 
 interface FuelRequest {
   id: string;
@@ -112,253 +110,177 @@ const RiderFuelRequest: React.FC = () => {
     loadRequests();
   }, []);
 
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      PENDING: 'bg-yellow-100 text-yellow-800',
-      APPROVED: 'bg-blue-100 text-blue-800',
-      COMPLETED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800'
-    };
-    return (
-      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${styles[status as keyof typeof styles]}`}>
-        {status}
-      </span>
-    );
+  const statusTone: Record<FuelRequest['status'], string> = {
+    PENDING: 'pending',
+    APPROVED: 'approved',
+    COMPLETED: 'completed',
+    REJECTED: 'rejected',
   };
 
-  const getFuelTypeLabel = (tank: string, amount: number | null) => {
-    if (tank === 'FULL_TANK') return 'Full Tank';
-    if (tank === 'HALF_TANK') return 'Half Tank';
-    if (amount === null) return tank;
-    return `${tank} Litres`;
+  const getFuelTypeLabel = (tank: string) => {
+    if (tank === 'FULL_TANK') return 'Full tank';
+    if (tank === 'HALF_TANK') return 'Half tank';
+    return /^\d+(\.\d+)?$/.test(tank) ? `${tank} litres` : tank.replace('_', ' ').toLowerCase();
   };
 
   const pendingCount = requests.filter(r => r.status === 'PENDING').length;
 
+  const phoneField = (label: string, value: string, set: (v: string) => void) => (
+    <label className="block">
+      <span className="text-sm font-semibold">{label}</span>
+      <div className="mt-1.5 flex h-12 rounded-2xl border border-gray-200 overflow-hidden focus-within:border-neutral-900">
+        <span className="px-3.5 flex items-center bg-gray-50 text-gray-600 text-sm border-r border-gray-200">+233</span>
+        <input
+          type="tel"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value.replace(/\D/g, '');
+            if (v.length <= 9 && !v.startsWith('0')) set(v);
+          }}
+          className="flex-1 px-3 text-base outline-none"
+          placeholder="24 123 4567"
+          maxLength={9}
+          required
+        />
+      </div>
+    </label>
+  );
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Fuel Requests</h1>
-          <p className="text-gray-600">View and manage your fuel requests</p>
+    <div className="space-y-5">
+      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/[0.04]">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-gray-100 text-gray-600 flex items-center justify-center">
+            <Fuel className="w-6 h-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-bold">Need fuel?</p>
+            <p className="text-sm text-gray-500">
+              {pendingCount > 0 ? `${pendingCount} request${pendingCount === 1 ? '' : 's'} waiting for approval` : 'Send a request to your station manager.'}
+            </p>
+          </div>
         </div>
-        <Button
+        <button
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#ea690c] hover:bg-[#d55a00] text-white flex items-center gap-2"
+          className="mt-4 w-full h-12 rounded-2xl bg-[#ea690c] text-white font-semibold flex items-center justify-center gap-2 active:scale-[0.99]"
         >
-          <Fuel className="w-4 h-4" />
-          Request Fuel
-        </Button>
+          <Plus className="w-5 h-5" /> New fuel request
+        </button>
+      </section>
+
+      <div>
+        <h2 className="font-bold px-1 mb-2">Recent requests</h2>
+        {requests.length === 0 ? (
+          <EmptyState icon={<FileText className="w-8 h-8" />} title="No fuel requests yet" />
+        ) : (
+          <ul className="rounded-3xl bg-white divide-y divide-gray-100 overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+            {requests.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 px-4 py-3.5">
+                <span className="h-9 w-9 shrink-0 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
+                  {r.status === 'APPROVED' || r.status === 'COMPLETED' ? <CheckCircle className="w-5 h-5" />
+                    : r.status === 'REJECTED' ? <XCircle className="w-5 h-5 text-red-600" />
+                    : <Clock className="w-5 h-5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.station || 'Fuel station'}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {getFuelTypeLabel(r.tank)} · {new Date(r.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    {r.amount ? ` · GHC ${r.amount.toFixed(2)}` : ''}
+                  </p>
+                </div>
+                <StatusPill tone={statusTone[r.status]}>{r.status.charAt(0) + r.status.slice(1).toLowerCase()}</StatusPill>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      <Card className="shadow-lg border-[#d1d1d1]">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-[#d1d1d1]">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Fuel Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Station</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Station Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Attendant Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-[#d1d1d1]">
-                {requests.map((req, index) => (
-                  <tr key={req.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-800">
-                      {getFuelTypeLabel(req.tank, req.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-800">
-                      {req.station}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5d5d5d]">
-                      {req.fuleStationPhoneNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5d5d5d]">
-                      {req.attendantPhoneNumber}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-800">
-                      {req.amount !== null ? `GHS ${req.amount.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#5d5d5d]">
-                      {new Date(req.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(req.status)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {requests.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                <Fuel className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p>No fuel requests yet</p>
-                <p className="text-sm mt-1">Click "Request Fuel" to submit your first request</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="border-b bg-gradient-to-r from-orange-50 to-white p-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <Fuel className="w-5 h-5 text-[#ea690c]" />
-                  New Fuel Request
-                </h2>
+      <BottomSheet
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="New fuel request"
+        footer={
+          <button
+            type="submit"
+            form="fuel-request-form"
+            disabled={loading}
+            className="w-full h-12 rounded-2xl bg-[#ea690c] text-white font-semibold disabled:opacity-60"
+          >
+            {loading ? 'Sending...' : 'Send request'}
+          </button>
+        }
+      >
+        <form id="fuel-request-form" onSubmit={handleSubmit} className="space-y-4 pb-2">
+          <div>
+            <span className="text-sm font-semibold">How much?</span>
+            <div className="mt-1.5 grid grid-cols-3 gap-2">
+              {([['FULL_TANK', 'Full tank'], ['HALF_TANK', 'Half tank'], ['LITRES', 'Litres']] as const).map(([v, l]) => (
                 <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                  key={v}
+                  type="button"
+                  onClick={() => setFuelType(v)}
+                  className={`h-12 rounded-2xl border-2 text-sm font-semibold transition ${
+                    fuelType === v ? 'border-neutral-900 text-neutral-900' : 'border-gray-200 text-gray-600'
+                  }`}
                 >
-                  <XCircle className="w-6 h-6" />
+                  {l}
                 </button>
-              </div>
-            </div>
-            <div className="p-6">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fuel Type *
-                  </label>
-                  <select
-                    value={fuelType}
-                    onChange={(e) => setFuelType(e.target.value as 'FULL_TANK' | 'HALF_TANK' | 'LITRES')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                    required
-                  >
-                    <option value="FULL_TANK">Full Tank</option>
-                    <option value="HALF_TANK">Half Tank</option>
-                    <option value="LITRES">Specific Litres</option>
-                  </select>
-                </div>
-
-                {fuelType === 'LITRES' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Number of Litres *
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={litres}
-                      onChange={(e) => setLitres(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                      placeholder="Enter litres"
-                      required
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fuel Station *
-                  </label>
-                  <select
-                    value={stationName}
-                    onChange={(e) => setStationName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                    required
-                  >
-                    <option value="">Select fuel station</option>
-                    {fuelStations.map((station) => (
-                      <option key={station} value={station}>{station}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Fuel Station Number *
-                  </label>
-                  <div className="flex items-center">
-                    <span className="inline-flex items-center px-3 py-2 border border-r-0 border-gray-300 bg-gray-50 text-gray-700 rounded-l-lg">
-                      +233
-                    </span>
-                    <input
-                      type="text"
-                      value={stationNumber}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        if (value.length <= 9 && !value.startsWith('0')) {
-                          setStationNumber(value);
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                      placeholder="XXXXXXXXX"
-                      maxLength={9}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Attendant Number *
-                  </label>
-                  <div className="flex items-center">
-                    <span className="inline-flex items-center px-3 py-2 border border-r-0 border-gray-300 bg-gray-50 text-gray-700 rounded-l-lg">
-                      +233
-                    </span>
-                    <input
-                      type="text"
-                      value={attendantNumber}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        if (value.length <= 9 && !value.startsWith('0')) {
-                          setAttendantNumber(value);
-                        }
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-r-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                      placeholder="XXXXXXXXX"
-                      maxLength={9}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes (Optional)
-                  </label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea690c] focus:border-transparent"
-                    placeholder="Additional information"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 bg-[#ea690c] hover:bg-[#d55a00] text-white"
-                  >
-                    {loading ? 'Submitting...' : 'Submit Request'}
-                  </Button>
-                </div>
-              </form>
+              ))}
             </div>
           </div>
-        </div>
-      )}
+
+          {fuelType === 'LITRES' && (
+            <label className="block">
+              <span className="text-sm font-semibold">Litres</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="1"
+                value={litres}
+                onChange={(e) => setLitres(e.target.value)}
+                className="mt-1.5 w-full h-12 px-4 rounded-2xl border border-gray-200 text-base"
+                placeholder="e.g. 10"
+                required
+              />
+            </label>
+          )}
+
+          <div>
+            <span className="text-sm font-semibold">Fuel station</span>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {fuelStations.map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setStationName(st)}
+                  className={`h-10 px-4 rounded-full border text-sm font-medium transition ${
+                    stationName === st ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-gray-200 text-gray-700'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+            {/* keeps native "required" validation for the station choice */}
+            <input tabIndex={-1} aria-hidden className="sr-only" value={stationName} onChange={() => {}} required />
+          </div>
+
+          {phoneField('Fuel station number', stationNumber, setStationNumber)}
+          {phoneField('Attendant number', attendantNumber, setAttendantNumber)}
+
+          <label className="block">
+            <span className="text-sm font-semibold">Notes <span className="font-normal text-gray-500">(optional)</span></span>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="mt-1.5 w-full px-4 py-3 rounded-2xl border border-gray-200 text-base resize-none"
+              placeholder="Anything the manager should know"
+              rows={3}
+            />
+          </label>
+        </form>
+      </BottomSheet>
     </div>
   );
 };

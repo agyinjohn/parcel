@@ -1,65 +1,19 @@
-// Tracking new changes
-
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
     PackageIcon,
-    MapPinIcon,
     CheckCircleIcon,
-    Loader,
-    UserIcon,
-    TruckIcon,
-    ClockIcon,
-    XIcon,
-    Phone,
     SearchIcon,
     ChevronDown,
     ChevronUp,
-    Calendar,
-    RotateCcw,
+    Download,
+    SlidersHorizontal,
 } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { formatPhoneNumber, formatDateTime, formatCurrency, phoneMatchesSearch } from "../../utils/dataHelpers";
-import riderService, { RiderAssignmentResponse, AssignmentStatus } from "../../services/riderService";
+import { formatPhoneNumber, formatCurrency, phoneMatchesSearch } from "../../utils/dataHelpers";
+import riderService, { RiderAssignmentResponse } from "../../services/riderService";
 import { useToast } from "../../components/ui/toast";
 import { generateHistoryPDF } from "../../utils/pdfGenerator";
 import { useStation } from "../../contexts/StationContext";
-import { Download } from "lucide-react";
-
-type UIStatus = "assigned" | "accepted" | "picked-up" | "out-for-delivery" | "delivered" | "delivery-failed";
-
-const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
-    switch (status) {
-        case "ASSIGNED":
-            return "assigned";
-        case "ACCEPTED":
-            return "accepted";
-        case "PICKED_UP":
-            return "picked-up";
-        case "DELIVERED":
-            return "delivered";
-        case "RETURNED":
-            return "delivery-failed";
-        default:
-            return "assigned";
-    }
-};
-
-const getStatusBadge = (status: AssignmentStatus) => {
-    const uiStatus = mapAssignmentStatusToUI(status);
-    const statusConfig: Record<UIStatus, { label: string; color: string; borderColor: string }> = {
-        "assigned": { label: "Assigned", color: "bg-blue-100 text-blue-800", borderColor: "border-blue-300" },
-        "accepted": { label: "Accepted", color: "bg-indigo-100 text-indigo-800", borderColor: "border-indigo-300" },
-        "picked-up": { label: "Picked Up", color: "bg-purple-100 text-purple-800", borderColor: "border-purple-300" },
-        "out-for-delivery": { label: "Out for Delivery", color: "bg-purple-100 text-purple-800", borderColor: "border-purple-300" },
-        "delivered": { label: "Delivered", color: "bg-green-100 text-green-800", borderColor: "border-green-300" },
-        "delivery-failed": { label: "Failed", color: "bg-red-100 text-red-800", borderColor: "border-red-300" },
-    };
-    const config = statusConfig[uiStatus] || { label: status, color: "bg-gray-100 text-gray-800", borderColor: "border-gray-300" };
-    return <Badge className={`${config.color} ${config.borderColor} border font-semibold px-3 py-1 shadow-sm`}>{config.label}</Badge>;
-};
+import { BottomSheet, CardSkeleton, EmptyState, ParcelDetails, parcelTotal, timeOf } from "../../components/rider/RiderUI";
 
 export const RiderHistory = (): JSX.Element => {
     const { showToast } = useToast();
@@ -360,518 +314,187 @@ export const RiderHistory = (): JSX.Element => {
         }
     };
 
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const filterCount = (startDate ? 1 : 0) + (endDate ? 1 : 0);
+    const totalCollected = filteredAssignments.reduce((s, a) => s + parcelTotal(a.parcel), 0);
+
     return (
-        <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 pb-6">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-                {/* Header */}
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Delivery History</h1>
-                    <p className="text-sm text-gray-600">View your completed deliveries</p>
+        <div className="space-y-4">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-2.5">
+                <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/[0.04]">
+                    <p className="text-[11px] text-gray-500">Delivered</p>
+                    <p className="text-xl font-bold">{completedAssignments.length}</p>
                 </div>
-
-                {/* Statistics Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-600 mb-1">Total Completed</p>
-                                    <p className="text-2xl font-bold text-green-600">{completedAssignments.length}</p>
-                                </div>
-                                <CheckCircleIcon className="w-8 h-8 text-green-500 opacity-50" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs text-gray-600 mb-1">Total Returned</p>
-                                    <p className="text-2xl font-bold text-red-600">{returnedAssignments.length}</p>
-                                </div>
-                                <RotateCcw className="w-8 h-8 text-red-500 opacity-50" />
-                            </div>
-                        </CardContent>
-                    </Card>
+                <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/[0.04]">
+                    <p className="text-[11px] text-gray-500">Returned</p>
+                    <p className="text-xl font-bold">{returnedAssignments.length}</p>
                 </div>
+                <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/[0.04] min-w-0">
+                    <p className="text-[11px] text-gray-500">Collected</p>
+                    <p className="text-xl font-bold text-neutral-900 truncate">GHC {Math.round(totalCollected).toLocaleString("en-GB")}</p>
+                </div>
+            </div>
 
-                {/* Search and Filter Bar */}
-                <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
-                    <CardContent className="p-4">
-                        <div className="space-y-3">
-                            {/* Search Row */}
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <div className="flex-1 relative">
-                                    <SearchIcon className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                                    <Input
-                                        placeholder="Search by parcel ID, recipient name, phone, address..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 border border-gray-300"
-                                    />
-                                </div>
-                                {(searchTerm || startDate || endDate) && (
-                                    <Button
-                                        onClick={() => {
-                                            setSearchTerm("");
-                                            setStartDate("");
-                                            setEndDate("");
-                                        }}
-                                        variant="outline"
-                                        className="border border-gray-300 whitespace-nowrap"
-                                    >
-                                        Clear
-                                    </Button>
-                                )}
-                            </div>
-                            
-                            {/* Date Range Row */}
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <div className="flex-1 flex flex-col sm:flex-row gap-2 sm:gap-3">
-                                    <div className="flex-1 relative">
-                                        <label className="block text-xs text-gray-600 mb-1.5 font-medium">From Date</label>
-                                        <Calendar className="absolute left-3 top-9 w-4 h-4 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            type="date"
-                                            value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
-                                            className="pl-9 border border-gray-300 text-sm"
-                                            max={endDate || new Date().toISOString().split('T')[0]}
-                                        />
-                                    </div>
-                                    <div className="flex-1 relative">
-                                        <label className="block text-xs text-gray-600 mb-1.5 font-medium">To Date</label>
-                                        <Calendar className="absolute left-3 top-9 w-4 h-4 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            type="date"
-                                            value={endDate}
-                                            onChange={(e) => setEndDate(e.target.value)}
-                                            className="pl-9 border border-gray-300 text-sm"
-                                            min={startDate}
-                                            max={new Date().toISOString().split('T')[0]}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex items-end">
-                                    <Button
-                                        onClick={handleDownloadPDF}
-                                        variant="outline"
-                                        className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 flex items-center gap-2 w-full sm:w-auto"
-                                        disabled={filteredAssignments.length === 0}
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        <span className="hidden sm:inline">Export History</span>
-                                        <span className="sm:hidden">Download</span>
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Search Results Count */}
-                {(searchTerm || startDate || endDate) && (
-                    <Card className="rounded-lg border border-blue-200 bg-blue-50 shadow-sm">
-                        <CardContent className="p-3">
-                            <div className="flex items-center justify-between">
-                                <p className="text-sm text-blue-800 font-medium">
-                                    {filteredAssignments.length === 0 ? (
-                                        <>No results found. Showing <span className="font-bold text-blue-900">0</span> out of <span className="font-bold text-blue-900">{completedAssignments.length}</span> {completedAssignments.length === 1 ? 'result' : 'results'}</>
-                                    ) : (
-                                        <>Showing <span className="font-bold text-blue-900">{filteredAssignments.length}</span> out of <span className="font-bold text-blue-900">{completedAssignments.length}</span> {completedAssignments.length === 1 ? 'result' : 'results'}</>
-                                    )}
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Completed Assignments */}
-                {loading ? (
-                    <Card className="rounded-xl border-0 bg-white shadow-lg">
-                        <CardContent className="p-12 text-center">
-                            <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                            <p className="text-neutral-700 font-semibold text-lg">Loading history...</p>
-                            <p className="text-sm text-gray-500 mt-2">Please wait</p>
-                        </CardContent>
-                    </Card>
-                ) : filteredAssignments.length === 0 ? (
-                    <Card className="rounded-xl border-0 bg-white shadow-lg">
-                        <CardContent className="p-12 text-center">
-                            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <PackageIcon className="w-10 h-10 text-gray-400" />
-                            </div>
-                            <p className="text-neutral-800 font-semibold text-lg mb-2">No delivery history</p>
-                            <p className="text-sm text-gray-500">
-                                Your completed deliveries will appear here
-                            </p>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="space-y-6">
-                        {groupedByDate.sortedDates.map((dateKey) => {
-                            const dateAssignments = groupedByDate.groups[dateKey];
-                            // Calculate total amount for this date (per-day total)
-                            const dayTotalAmount = dateAssignments.reduce((sum, assignment) => {
-                                const parcel = assignment.parcel;
-                                const totalAmount =
-                                    (parcel.deliveryCost || 0) +
-                                    (parcel.pickUpCost || 0) +
-                                    (parcel.inboundCost || 0) +
-                                    (parcel.storageCost || 0);
-                                return sum + totalAmount;
-                            }, 0);
-
-                            return (
-                                <Card key={dateKey} className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-                                    {/* Date Header */}
-                                    <div 
-                                        className="bg-gradient-to-r from-[#ea690c] to-orange-600 px-6 py-3 border-b-2 border-orange-700 cursor-pointer hover:from-orange-600 hover:to-orange-700 transition-colors"
-                                        onClick={() => toggleDateCollapse(dateKey)}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                                <ClockIcon className="w-5 h-5" />
-                                                {formatDateHeader(dateKey)}
-                                            </h2>
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex flex-col items-end gap-1 text-right">
-                                                    <Badge className="bg-white text-[#ea690c] border-white text-xs sm:text-[13px] font-semibold px-3 py-1 shadow-sm">
-                                                        {dateAssignments.length} {dateAssignments.length === 1 ? 'delivery' : 'deliveries'}
-                                                    </Badge>
-                                                    <span className="text-xs sm:text-sm font-semibold text-white">
-                                                        Daily Total: {formatCurrency(dayTotalAmount)}
-                                                    </span>
-                                                </div>
-                                                {collapsedDates.has(dateKey) ? (
-                                                    <ChevronDown className="w-5 h-5 text-white" />
-                                                ) : (
-                                                    <ChevronUp className="w-5 h-5 text-white" />
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Assignments Table */}
-                                    {!collapsedDates.has(dateKey) && (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full border-collapse">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Parcel ID</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Recipient</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Phone</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Location</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Amount</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Status</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Completed</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white">
-                                                {dateAssignments.map((assignment, index) => {
-                                                    const parcel = assignment.parcel;
-                                                    const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                                                        (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-
-                                                    return (
-                                                        <tr
-                                                            key={assignment.assignmentId}
-                                                            className={`hover:bg-gray-50 transition-colors ${index !== dateAssignments.length - 1 ? 'border-b border-gray-200' : ''}`}
-                                                        >
-                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                                <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs font-semibold">
-                                                                    {parcel.parcelId}
-                                                                </Badge>
-                                                            </td>
-                                                            <td className="px-4 py-4 border-r border-gray-100">
-                                                                <div className="text-sm font-semibold text-neutral-800">
-                                                                    {parcel.receiverName || "N/A"}
-                                                                </div>
-                                                                {parcel.parcelDescription && (
-                                                                    <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">
-                                                                        {parcel.parcelDescription}
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                                {parcel.recieverPhoneNumber ? (
-                                                                    <a
-                                                                        href={`tel:${parcel.recieverPhoneNumber}`}
-                                                                        className="text-sm text-[#ea690c] hover:underline font-medium"
-                                                                    >
-                                                                        {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                                                                    </a>
-                                                                ) : (
-                                                                    <span className="text-sm text-gray-400">N/A</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-4 border-r border-gray-100">
-                                                                <div className="text-sm text-neutral-700">
-                                                                    {parcel.homeDelivery && parcel.receiverAddress ? (
-                                                                        <div className="flex items-start gap-1">
-                                                                            <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                                                            <span className="truncate max-w-[200px]" title={parcel.receiverAddress}>
-                                                                                {parcel.receiverAddress}
-                                                                            </span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex items-center gap-1">
-                                                                            <PackageIcon className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                                                                            <span className="text-sm">
-                                                                                Shelf: <strong>{parcel.shelfName || "N/A"}</strong>
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                                <div className="text-sm font-bold text-[#ea690c]">
-                                                                    {formatCurrency(totalAmount)}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                                {getStatusBadge(assignment.status)}
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                                {assignment.completedAt ? (
-                                                                    <div className="text-xs text-gray-600">
-                                                                        {formatDateTime(new Date(assignment.completedAt).toISOString())}
-                                                                    </div>
-                                                                ) : assignment.assignedAt ? (
-                                                                    <div className="text-xs text-gray-600">
-                                                                        {formatDateTime(new Date(assignment.assignedAt).toISOString())}
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-xs text-gray-400">N/A</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                                <div className="flex items-center gap-2">
-                                                                    {parcel.recieverPhoneNumber && (
-                                                                        <Button
-                                                                            onClick={() => window.location.href = `tel:${parcel.recieverPhoneNumber}`}
-                                                                            variant="outline"
-                                                                            className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
-                                                                            title={`Call ${parcel.receiverName || 'recipient'}`}
-                                                                        >
-                                                                            <Phone className="w-3.5 h-3.5" />
-                                                                        </Button>
-                                                                    )}
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            setSelectedAssignment(assignment);
-                                                                            setShowDetailsModal(true);
-                                                                        }}
-                                                                        variant="outline"
-                                                                        className="border-gray-300 text-gray-700 hover:bg-gray-50 text-xs px-3 py-1.5"
-                                                                    >
-                                                                        View Details
-                                                                    </Button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    )}
-                                </Card>
-                            );
-                        })}
+            {/* Search + actions (sticky under the app bar) */}
+            <div className="sticky top-[var(--rider-bar)] transition-[top] duration-200 motion-reduce:transition-none z-30 -mx-4 px-4 py-2 bg-[#f5f4f1]/95 backdrop-blur">
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="search"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Search name, phone, ID"
+                            className="w-full h-12 pl-10 pr-3 rounded-2xl bg-white border border-gray-200 text-sm focus:outline-none focus:border-neutral-900"
+                        />
                     </div>
+                    <button
+                        onClick={() => setFiltersOpen(true)}
+                        className="relative h-12 w-12 rounded-2xl bg-white border border-gray-200 flex items-center justify-center text-gray-700 active:scale-95"
+                        aria-label="Filter by date"
+                    >
+                        <SlidersHorizontal className="w-5 h-5" />
+                        {filterCount > 0 && (
+                            <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-neutral-900 text-white text-[10px] font-bold flex items-center justify-center">{filterCount}</span>
+                        )}
+                    </button>
+                    <button
+                        onClick={handleDownloadPDF}
+                        disabled={filteredAssignments.length === 0}
+                        className="h-12 w-12 rounded-2xl bg-white border border-gray-200 flex items-center justify-center text-gray-700 active:scale-95 disabled:opacity-40"
+                        aria-label="Download PDF"
+                    >
+                        <Download className="w-5 h-5" />
+                    </button>
+                </div>
+                {(searchTerm || filterCount > 0) && (
+                    <p className="text-xs text-gray-500 mt-2">
+                        {filteredAssignments.length} result{filteredAssignments.length === 1 ? "" : "s"}
+                        <button
+                            className="ml-2 text-[#ea690c] font-semibold"
+                            onClick={() => { setSearchTerm(""); setStartDate(""); setEndDate(""); }}
+                        >
+                            Clear
+                        </button>
+                    </p>
                 )}
             </div>
 
-            {/* Parcel Details Modal */}
-            {showDetailsModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-2xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-neutral-800">Parcel Details</h3>
+            {loading && assignments.length === 0 ? (
+                <CardSkeleton />
+            ) : filteredAssignments.length === 0 ? (
+                <EmptyState
+                    icon={<PackageIcon className="w-8 h-8" />}
+                    title={completedAssignments.length === 0 ? "No deliveries yet" : "No matches"}
+                    hint={completedAssignments.length === 0 ? "Completed deliveries will appear here." : "Try a different search or date range."}
+                />
+            ) : (
+                <div className="space-y-5">
+                    {groupedByDate.sortedDates.map((dateKey) => {
+                        const items = groupedByDate.groups[dateKey];
+                        const collapsed = collapsedDates.has(dateKey);
+                        const dayTotal = items.reduce((s, a) => s + parcelTotal(a.parcel), 0);
+                        return (
+                            <section key={dateKey}>
                                 <button
-                                    onClick={() => {
-                                        setShowDetailsModal(false);
-                                        setSelectedAssignment(null);
-                                    }}
-                                    className="text-[#9a9a9a] hover:text-neutral-800"
+                                    onClick={() => toggleDateCollapse(dateKey)}
+                                    className="w-full flex items-center justify-between px-1 mb-2"
+                                    aria-expanded={!collapsed}
                                 >
-                                    <XIcon className="w-5 h-5" />
+                                    <span className="text-sm font-bold text-neutral-800">{formatDateHeader(dateKey)}</span>
+                                    <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                                        {items.length} · {formatCurrency(dayTotal)}
+                                        {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                                    </span>
                                 </button>
-                            </div>
-
-                            {selectedAssignment && (() => {
-                                const parcel = selectedAssignment.parcel;
-                                const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                                    (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-
-                                return (
-                                    <div className="space-y-6">
-                                        {/* Header */}
-                                        <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
-                                            <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 text-sm font-semibold px-3 py-1 shadow-sm">
-                                                {parcel.parcelId}
-                                            </Badge>
-                                            {getStatusBadge(selectedAssignment.status)}
-                                        </div>
-
-                                        {/* Recipient Information */}
-                                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                                            <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
-                                                <UserIcon className="w-4 h-4" />
-                                                Recipient Information
-                                            </h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <div>
-                                                    <p className="text-xs text-gray-600 mb-1">Name</p>
-                                                    <p className="text-sm font-semibold text-neutral-800">{parcel.receiverName || "N/A"}</p>
-                                                </div>
-                                                {parcel.recieverPhoneNumber && (
-                                                    <div>
-                                                        <p className="text-xs text-gray-600 mb-1">Phone</p>
-                                                        <a
-                                                            href={`tel:${parcel.recieverPhoneNumber}`}
-                                                            className="text-sm font-semibold text-[#ea690c] hover:underline"
-                                                        >
-                                                            {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                                                        </a>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Delivery/Pickup Location */}
-                                        {parcel.homeDelivery && parcel.receiverAddress ? (
-                                            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                                                <h4 className="text-sm font-bold text-green-900 mb-3 flex items-center gap-2">
-                                                    <MapPinIcon className="w-4 h-4" />
-                                                    Delivery Address
-                                                </h4>
-                                                <p className="text-sm text-neutral-800">{parcel.receiverAddress}</p>
-                                            </div>
-                                        ) : (
-                                            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                                                <h4 className="text-sm font-bold text-purple-900 mb-3 flex items-center gap-2">
-                                                    <PackageIcon className="w-4 h-4" />
-                                                    Pickup Location
-                                                </h4>
-                                                <p className="text-sm text-neutral-800">
-                                                    Shelf: <strong>{parcel.shelfName || "N/A"}</strong> (Customer Pickup)
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Sender Information */}
-                                        {(parcel.senderName || parcel.senderPhoneNumber) && (
-                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                                                    <UserIcon className="w-4 h-4" />
-                                                    Sender Information
-                                                </h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {parcel.senderName && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-600 mb-1">Name</p>
-                                                            <p className="text-sm font-semibold text-neutral-800">{parcel.senderName}</p>
+                                {!collapsed && (
+                                    <ul className="rounded-3xl bg-white divide-y divide-gray-100 overflow-hidden shadow-sm ring-1 ring-black/[0.04]">
+                                        {items.map((a) => {
+                                            const p = a.parcel;
+                                            return (
+                                                <li key={`${a.assignmentId}-${p.parcelId}`}>
+                                                    <button
+                                                        onClick={() => { setSelectedAssignment(a); setShowDetailsModal(true); }}
+                                                        className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-gray-50"
+                                                    >
+                                                        <span className="h-9 w-9 shrink-0 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center">
+                                                            <CheckCircleIcon className="w-5 h-5" />
+                                                        </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="font-medium truncate">{p.receiverName || "Unknown recipient"}</p>
+                                                            <p className="text-xs text-gray-500 truncate">
+                                                                {timeOf(a.completedAt || a.assignedAt)} · {p.receiverAddress || p.parcelDescription || p.parcelId}
+                                                            </p>
                                                         </div>
-                                                    )}
-                                                    {parcel.senderPhoneNumber && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-600 mb-1">Phone</p>
-                                                            <a
-                                                                href={`tel:${parcel.senderPhoneNumber}`}
-                                                                className="text-sm font-semibold text-[#ea690c] hover:underline"
-                                                            >
-                                                                {formatPhoneNumber(parcel.senderPhoneNumber)}
-                                                            </a>
+                                                        <div className="text-right shrink-0">
+                                                            <p className="font-semibold text-sm">{formatCurrency(parcelTotal(p))}</p>
+                                                            {a.paymentMethod && (
+                                                                <p className="text-[11px] text-gray-500">{a.paymentMethod === "momo" ? "MoMo" : "Cash"}</p>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Item Description */}
-                                        {parcel.parcelDescription && (
-                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                                <h4 className="text-sm font-bold text-gray-900 mb-2">Item Description</h4>
-                                                <p className="text-sm text-neutral-800">{parcel.parcelDescription}</p>
-                                                {parcel.fragile && (
-                                                    <Badge className="mt-2 bg-red-100 text-red-800 border-red-200">
-                                                        Fragile
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Amount Breakdown */}
-                                        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
-                                            <h4 className="text-sm font-bold text-orange-900 mb-3 flex items-center gap-2">
-                                                <TruckIcon className="w-4 h-4" />
-                                                Amount Collected
-                                            </h4>
-                                            <div className="space-y-2 bg-white/60 rounded-lg p-3">
-                                                {(parcel.inboundCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Item Value:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.inboundCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.deliveryCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Delivery Fee:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.deliveryCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.pickUpCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Pickup Cost:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.pickUpCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                {(parcel.storageCost || 0) > 0 && (
-                                                    <div className="flex justify-between text-sm">
-                                                        <span className="text-gray-700">Storage:</span>
-                                                        <span className="font-semibold text-gray-900">GHC {(parcel.storageCost || 0).toFixed(2)}</span>
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between pt-2 border-t-2 border-orange-200">
-                                                    <span className="text-base font-bold text-orange-900">Total:</span>
-                                                    <span className="text-xl font-bold text-[#ea690c]">
-                                                        {formatCurrency(totalAmount)}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Assignment Info */}
-                                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                            <h4 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
-                                                <ClockIcon className="w-4 h-4" />
-                                                Assignment Information
-                                            </h4>
-                                            <div className="space-y-1">
-                                                {selectedAssignment.assignedAt && (
-                                                    <p className="text-xs text-gray-600">
-                                                        Assigned: {formatDateTime(new Date(selectedAssignment.assignedAt).toISOString())}
-                                                    </p>
-                                                )}
-                                                {selectedAssignment.completedAt && (
-                                                    <p className="text-xs text-gray-600">
-                                                        Completed: {formatDateTime(new Date(selectedAssignment.completedAt).toISOString())}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-                        </CardContent>
-                    </Card>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                )}
+                            </section>
+                        );
+                    })}
                 </div>
             )}
+
+            <BottomSheet
+                open={showDetailsModal && !!selectedAssignment}
+                onClose={() => { setShowDetailsModal(false); setSelectedAssignment(null); }}
+                title={selectedAssignment?.parcel.receiverName || "Parcel details"}
+                subtitle={selectedAssignment?.parcel.parcelDescription}
+            >
+                {selectedAssignment && <ParcelDetails assignment={selectedAssignment} />}
+            </BottomSheet>
+
+            <BottomSheet
+                open={filtersOpen}
+                onClose={() => setFiltersOpen(false)}
+                title="Filter by date"
+                footer={
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => { setStartDate(""); setEndDate(""); }}
+                            className="h-12 px-5 rounded-2xl bg-gray-100 text-gray-700 font-semibold"
+                        >
+                            Reset
+                        </button>
+                        <button onClick={() => setFiltersOpen(false)} className="h-12 flex-1 rounded-2xl bg-[#ea690c] text-white font-semibold">
+                            Show {filteredAssignments.length} result{filteredAssignments.length === 1 ? "" : "s"}
+                        </button>
+                    </div>
+                }
+            >
+                <div className="space-y-4 pb-2">
+                    <label className="block">
+                        <span className="text-sm font-semibold">From</span>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            max={endDate || undefined}
+                            className="mt-1.5 w-full h-12 px-4 rounded-2xl border border-gray-200 bg-white"
+                        />
+                    </label>
+                    <label className="block">
+                        <span className="text-sm font-semibold">To</span>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            min={startDate || undefined}
+                            className="mt-1.5 w-full h-12 px-4 rounded-2xl border border-gray-200 bg-white"
+                        />
+                    </label>
+                </div>
+            </BottomSheet>
         </div>
     );
 };
-

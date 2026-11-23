@@ -1,3 +1,5 @@
+// Must stay first: installs the mock API adapter before services create axios instances.
+import "./mocks/setup";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import axios from "axios";

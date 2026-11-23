@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import authService from './authService';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, API_V2 } from '../config/api';
 
 const API_BASE_URL_ADMIN = API_ENDPOINTS.ADMIN;
 const API_BASE_URL_USER = API_ENDPOINTS.USER;
@@ -27,8 +27,9 @@ export const toBackendRole = (role: string): BackendRole => {
 };
 
 /** Convert backend API role to internal app role (routes, sidebar, filters) */
-export const fromBackendRole = (role: string): AdminCreatableRole | "ADMIN" => {
+export const fromBackendRole = (role: string): AdminCreatableRole | "ADMIN" | "SUPER_ADMIN" => {
     const r = role?.toUpperCase()?.trim() || "";
+    if (["SUPERADMIN", "SUPER_ADMIN", "SUPER-ADMIN", "SUPER ADMIN"].includes(r)) return "SUPER_ADMIN";
     if (["CALLCENTER", "CALL_CENTER", "CALL-CENTER", "CALL CENTER", "CALLER"].includes(r)) {
         return "CALLER";
     }
@@ -60,8 +61,12 @@ interface BackendCreateUserRequest {
     password?: string;
     phoneNumber: string;
     role: BackendRole;
-    departmentRole: DepartmentRole;
+    /** Current backend only; the updated backend (API_V2) dropped it. */
+    departmentRole?: DepartmentRole;
+    /** Current backend: a list of offices. */
     officeIds?: string[];
+    /** Updated backend (API_V2): one office. */
+    officeId?: string;
 }
 
 interface UserResponse {
@@ -82,6 +87,9 @@ interface ApiUser {
     phoneNumber: string;
     email?: string;
     status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "DELETED";
+    /** IMEI of the GPS tracker assigned to a rider, if any. */
+    deviceImei?: string;
+    officeId?: string;
     office?: {
         id: string;
         name: string;
@@ -187,10 +195,13 @@ class UserService {
                 email: userData.email,
                 phoneNumber: userData.phoneNumber,
                 role: toBackendRole(userData.role),
-                departmentRole: userData.departmentRole,
+                ...(API_V2 ? {} : { departmentRole: userData.departmentRole }),
             };
             if (userData.password) payload.password = userData.password;
-            if (userData.officeId) payload.officeIds = [userData.officeId];
+            if (userData.officeId) {
+                if (API_V2) payload.officeId = userData.officeId;
+                else payload.officeIds = [userData.officeId];
+            }
 
             const response = await this.apiClientAdmin.post<UserResponse>(
                 '/register',

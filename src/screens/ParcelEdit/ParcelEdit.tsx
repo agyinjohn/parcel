@@ -13,6 +13,9 @@ import frontdeskService, { ParcelResponse } from "../../services/frontdeskServic
 import { useToast } from "../../components/ui/toast";
 import authService from "../../services/authService";
 import { useFrontdeskParcel } from "../../contexts/FrontdeskParcelContext";
+import {
+    DeliveryLocationPicker, type DeliveryLocation, locationFromParcel, locationToUpdate, sameLocation,
+} from "../../components/DeliveryLocationPicker";
 
 export const ParcelEdit = (): JSX.Element => {
     const { currentStation, currentUser, userRole } = useStation();
@@ -32,6 +35,9 @@ export const ParcelEdit = (): JSX.Element => {
     const [selectedParcel, setSelectedParcel] = useState<ParcelResponse | null>(null);
     const [showEditModal, setShowEditModal] = useState(false);
     const [saving, setSaving] = useState(false);
+    // Delivery pin being edited, and whether Google Maps loaded (a pin can't be required without it).
+    const [deliveryPin, setDeliveryPin] = useState<DeliveryLocation | null>(null);
+    const [pinMapAvailable, setPinMapAvailable] = useState(true);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -118,6 +124,7 @@ export const ParcelEdit = (): JSX.Element => {
             parcelWeight: parcel.parcelWeight?.toString() || "",
             images: parcel.images || [],
         });
+        setDeliveryPin(locationFromParcel(parcel));
         setShowEditModal(true);
     };
 
@@ -125,8 +132,17 @@ export const ParcelEdit = (): JSX.Element => {
         await navigatePage(newPage);
     };
 
+    // Turning home delivery on needs a pin, as at intake. Older home-delivery parcels without
+    // one can still be edited; they just show a note.
+    const turningOnHomeDelivery = !!selectedParcel && formData.homeDelivery && !selectedParcel.homeDelivery;
+    const pinMissing = turningOnHomeDelivery && pinMapAvailable && !deliveryPin;
+
     const handleSave = async () => {
         if (!selectedParcel) return;
+        if (pinMissing) {
+            showToast("Choose the delivery location: search a landmark or pin it on the map", "warning");
+            return;
+        }
 
         setSaving(true);
         try {
@@ -165,6 +181,11 @@ export const ParcelEdit = (): JSX.Element => {
             updateData.fragile = formData.fragile;
             updateData.hasCalled = formData.hasCalled;
             updateData.homeDelivery = formData.homeDelivery;
+
+            // Delivery pin: only sent when it changed (null clears it).
+            if (!sameLocation(locationFromParcel(selectedParcel), deliveryPin)) {
+                Object.assign(updateData, locationToUpdate(deliveryPin));
+            }
 
             const response = await frontdeskService.updateParcel(selectedParcel.parcelId, updateData);
 
@@ -500,6 +521,33 @@ export const ParcelEdit = (): JSX.Element => {
                                                 className="border border-[#d1d1d1]"
                                             />
                                         </div>
+                                        <div className="col-span-1 md:col-span-2">
+                                            <Label className="text-sm font-semibold text-neutral-800 mb-1 block flex items-center gap-1">
+                                                <MapPin className="w-4 h-4" />
+                                                Delivery Location on Map
+                                                {formData.homeDelivery && turningOnHomeDelivery && <span className="text-[#e22420]">*</span>}
+                                            </Label>
+                                            <p className="text-xs text-[#5d5d5d] mb-2">
+                                                {formData.homeDelivery
+                                                    ? "Riders get directions to this point. Search a landmark or pin the exact spot."
+                                                    : "Only used for home delivery."}
+                                            </p>
+                                            <DeliveryLocationPicker
+                                                value={deliveryPin}
+                                                onChange={(loc) => {
+                                                    setDeliveryPin(loc);
+                                                    if (loc && !formData.receiverAddress.trim()) setFormData((f) => ({ ...f, receiverAddress: loc.address || loc.name }));
+                                                }}
+                                                onAvailabilityChange={setPinMapAvailable}
+                                                error={pinMissing ? "required" : undefined}
+                                            />
+                                            {pinMissing && (
+                                                <p className="text-xs text-red-600 mt-1.5">A delivery pin is required when switching on home delivery.</p>
+                                            )}
+                                            {!pinMissing && formData.homeDelivery && !deliveryPin && pinMapAvailable && (
+                                                <p className="text-xs text-amber-700 mt-1.5">No pin yet; riders get directions from the address text.</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -774,7 +822,7 @@ export const ParcelEdit = (): JSX.Element => {
                                     </Button>
                                     <Button
                                         onClick={handleSave}
-                                        disabled={saving}
+                                        disabled={saving || pinMissing}
                                         className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
                                     >
                                         {saving ? (

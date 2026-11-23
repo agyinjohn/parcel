@@ -13,6 +13,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Switch } from "../../../components/ui/switch";
 import { PlusIcon, Package, User, Truck, FileText, Save, X, ImageIcon } from "lucide-react";
 import { CostInput } from "../../../components/ui/CostInput";
+import { DeliveryLocationPicker, type DeliveryLocation } from "../../../components/DeliveryLocationPicker";
 import { useToast } from "../../../components/ui/toast";
 
 interface ParcelFormData {
@@ -35,6 +36,8 @@ interface ParcelFormData {
     hasCalled?: boolean;
     images?: string[];
     parcelWeight?: number;
+    /** Pinned drop-off point; required for home delivery when the map is available. */
+    deliveryLocation?: DeliveryLocation;
 }
 
 interface InfoSectionProps {
@@ -131,6 +134,9 @@ export const InfoSection = ({
     const [itemValue, setItemValue] = useState<number | undefined>(undefined);
     const [homeDelivery, setHomeDelivery] = useState(false);
     const [deliveryCost, setDeliveryCost] = useState<number | undefined>(undefined);
+    const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocation | null>(null);
+    // If Google Maps can't load we can't enforce a pin; staff may still save (the backend accepts it without one).
+    const [mapAvailable, setMapAvailable] = useState(true);
     const [specialNotes, setSpecialNotes] = useState("");
     const [phoneError, setPhoneError] = useState("");
     const [isDriverLocked, setIsDriverLocked] = useState(false);
@@ -272,6 +278,10 @@ export const InfoSection = ({
                 setPhoneError("Delivery cost is required when home delivery is enabled");
                 return false;
             }
+            if (mapAvailable && !deliveryLocation) {
+                setPhoneError("Choose the delivery location: search a landmark or pin it on the map");
+                return false;
+            }
         }
         return true;
     };
@@ -310,6 +320,7 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
         };
 
         onAddParcel(parcelData);
@@ -356,6 +367,7 @@ export const InfoSection = ({
         setItemValue(undefined);
         setHomeDelivery(false);
         setDeliveryCost(undefined);
+        setDeliveryLocation(null);
         setSpecialNotes("");
         setPhoneError("");
         setSaveToAddressListChecked(false);
@@ -397,6 +409,7 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
         };
 
         // Capture address-list preference and values for after parcel save (behind the scene)
@@ -440,6 +453,7 @@ export const InfoSection = ({
         setItemValue(undefined);
         setHomeDelivery(false);
         setDeliveryCost(undefined);
+        setDeliveryLocation(null);
         setSpecialNotes("");
         setPhoneError("");
         setImages([]);
@@ -458,7 +472,7 @@ export const InfoSection = ({
         phoneNumber.trim() &&
         shelf.trim() &&
         !phoneError &&
-        (!homeDelivery || (receiverAddress.trim() && deliveryCost != null && deliveryCost > 0));
+        (!homeDelivery || (receiverAddress.trim() && deliveryCost != null && deliveryCost > 0 && (!mapAvailable || !!deliveryLocation)));
 
     return (
         <div className="space-y-4">
@@ -502,6 +516,9 @@ export const InfoSection = ({
                                             <p className="text-xs text-green-600 mt-1 font-semibold">
                                                 🏠 Home Delivery - GHC {parcel.deliveryCost?.toFixed(2) || "0.00"}
                                             </p>
+                                        )}
+                                        {parcel.homeDelivery && parcel.deliveryLocation && (
+                                            <p className="text-xs text-[#5d5d5d] mt-0.5">📍 {parcel.deliveryLocation.name}</p>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -834,6 +851,7 @@ export const InfoSection = ({
                                                 if (!checked) {
                                                     setReceiverAddress("");
                                                     setDeliveryCost(undefined);
+                                                    setDeliveryLocation(null);
                                                     setSaveToAddressListChecked(false);
                                                 }
                                             }}
@@ -910,6 +928,25 @@ export const InfoSection = ({
                                                         </span>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 pt-4">
+                                                <Label className="text-sm font-semibold text-neutral-800">
+                                                    Delivery Location on Map <span className="text-[#e22420]">*</span>
+                                                </Label>
+                                                <p className="text-xs text-[#5d5d5d] -mt-1">
+                                                    Search a nearby landmark or business, or pin the exact spot on the map, so the rider knows where the parcel is going.
+                                                </p>
+                                                <DeliveryLocationPicker
+                                                    value={deliveryLocation}
+                                                    onChange={(loc) => {
+                                                        setDeliveryLocation(loc);
+                                                        // Fill the address box from the place when it's still empty.
+                                                        if (loc && !receiverAddress.trim()) setReceiverAddress(loc.address || loc.name);
+                                                        if (loc) setPhoneError("");
+                                                    }}
+                                                    onAvailabilityChange={setMapAvailable}
+                                                    error={phoneError.startsWith("Choose the delivery location") ? phoneError : undefined}
+                                                />
                                             </div>
                                         </>
                                     )}

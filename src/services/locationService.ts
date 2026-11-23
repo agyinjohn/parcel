@@ -13,6 +13,12 @@ interface Office {
     locationName: string;
     managerName: string;
     createdAt: number;
+    /** Station position (proposed backend field, docs/BACKEND_HANDOFF.md Part E1). */
+    latitude?: number | null;
+    longitude?: number | null;
+    /** Default charge for pickup requests at this station (proposed, handoff Part J). */
+    pickupChargeEnabled?: boolean | null;
+    pickupChargeAmount?: number | null;
 }
 
 interface Station extends Office { }
@@ -284,6 +290,23 @@ class LocationService {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve location. Please try again.',
             };
+        }
+    }
+
+    /**
+     * Update a station: PUT /api-admin/office/{id} (OfficeUpdateRequest). The pickup charge
+     * fields are proposed additions (handoff Part J).
+     */
+    async updateStation(
+        stationId: string,
+        data: { name?: string; address?: string; locationId?: string; managerId?: string; pickupChargeEnabled?: boolean; pickupChargeAmount?: number | null }
+    ): Promise<{ success: boolean; message: string }> {
+        try {
+            await this.apiClientAdmin.put(`/office/${stationId}`, data);
+            return { success: true, message: 'Station updated successfully' };
+        } catch (error: any) {
+            console.error('Update station error:', error);
+            return { success: false, message: error.response?.data?.message || 'Failed to update station. Please try again.' };
         }
     }
 

@@ -6,7 +6,10 @@
   "description": "Mealex and Mailex Parcel Delivery System",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "dev:test": "vite --mode staging",
     "build": "vite build",
+    "build:test": "vite build --mode staging",
     "test": "vitest run"
   },
   "dependencies": {

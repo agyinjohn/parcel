@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
     CheckIcon,
     MapPinIcon,
@@ -20,6 +20,9 @@ import { ParcelResponse, RiderResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
 import frontdeskService from "../../services/frontdeskService";
 import { useStation } from "../../contexts/StationContext";
+import { useLocation as useLocations } from "../../contexts/LocationContext";
+import { RoutePlanPanel, toAssignmentPlan } from "../../components/RoutePlanPanel";
+import type { RoutePlan } from "../../utils/routePlan";
 import { Label } from "@radix-ui/react-label";
 
 interface ParcelCardProps {
@@ -167,7 +170,8 @@ const ParcelCard = ({ parcel, isSelected, onToggle, onRemove, filterMode }: Parc
 
 export const ParcelSelection = (): JSX.Element => {
     const { showToast } = useToast();
-    const { currentUser } = useStation();
+    const { currentUser, userOfficeId } = useStation();
+    const { stations } = useLocations();
     const [allParcels, setAllParcels] = useState<ParcelResponse[]>([]);
     const [filteredParcels, setFilteredParcels] = useState<ParcelResponse[]>([]);
     const [loading, setLoading] = useState(false);
@@ -177,6 +181,28 @@ export const ParcelSelection = (): JSX.Element => {
     const [loadingRiders, setLoadingRiders] = useState(false);
     const [selectedRider, setSelectedRider] = useState<string | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
+    // Two steps in the rider pop-up: choose the rider, then confirm the planned route.
+    const [riderStep, setRiderStep] = useState<"rider" | "plan">("rider");
+    const [routePlan, setRoutePlan] = useState<RoutePlan | null>(null);
+    const [assignOrder, setAssignOrder] = useState<string[]>([]);
+
+    // Station position, once the backend returns office coordinates (handoff Part E1).
+    const station = useMemo(() => {
+        const office: any = stations.find((st) => st.id === userOfficeId) ?? currentUser?.office;
+        return office?.latitude != null && office?.longitude != null
+            ? { lat: Number(office.latitude), lng: Number(office.longitude), name: office.name as string | undefined }
+            : null;
+    }, [stations, userOfficeId, currentUser]);
+    const parcelsToPlan = useMemo(
+        () => allParcels.filter((p) => selectedParcels.has(p.parcelId)),
+        [allParcels, selectedParcels]
+    );
+    const closeRiderModal = () => {
+        setShowRiderModal(false);
+        setSelectedRider(null);
+        setRiderStep("rider");
+        setRoutePlan(null);
+    };
     const [filterMode, setFilterMode] = useState<'ready' | 'assigned'>('ready');
     const [removingParcel, setRemovingParcel] = useState<string | null>(null);
     const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
@@ -241,6 +267,8 @@ export const ParcelSelection = (): JSX.Element => {
 
     const handleAssign = () => {
         if (selectedParcels.size > 0) {
+            setRiderStep("rider");
+            setRoutePlan(null);
             setShowRiderModal(true);
             fetchRiders();
         }
@@ -285,15 +313,17 @@ export const ParcelSelection = (): JSX.Element => {
         setIsAssigning(true);
 
         try {
-            const parcelIds = Array.from(selectedParcels);
-            const response = await frontdeskService.assignParcelsToRider(selectedRider, parcelIds);
+            // Assign in the planned order (pinned stops first, unpinned after), with the plan.
+            const parcelIds = assignOrder.length === selectedParcels.size ? assignOrder : Array.from(selectedParcels);
+            const response = await frontdeskService.assignParcelsToRider(
+                selectedRider, parcelIds, routePlan && routePlan.order.length ? toAssignmentPlan(routePlan) : undefined
+            );
 
             if (response.success) {
                 showToast(`Successfully assigned ${parcelIds.length} parcel(s) to rider!`, "success");
 
                 setSelectedParcels(new Set());
-                setSelectedRider(null);
-                setShowRiderModal(false);
+                closeRiderModal();
 
                 const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
                 if (refreshResponse.success && refreshResponse.data) {
@@ -507,13 +537,13 @@ export const ParcelSelection = (): JSX.Element => {
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-2">
                                     <UserIcon className="w-6 h-6 text-[#ea690c]" />
-                                    <h2 className="text-xl font-bold text-neutral-800">Select Rider</h2>
+                                    <h2 className="text-xl font-bold text-neutral-800">
+                                        {riderStep === "rider" ? "Select Rider" : `Route plan for ${selectedRiderData?.name ?? "rider"}`}
+                                    </h2>
+                                    <span className="text-xs text-[#9a9a9a] ml-1">Step {riderStep === "rider" ? 1 : 2} of 2</span>
                                 </div>
                                 <button
-                                    onClick={() => {
-                                        setShowRiderModal(false);
-                                        setSelectedRider(null);
-                                    }}
+                                    onClick={closeRiderModal}
                                     className="text-[#9a9a9a] hover:text-neutral-800 transition-colors"
                                 >
                                     <X className="w-5 h-5" />
@@ -528,6 +558,37 @@ export const ParcelSelection = (): JSX.Element => {
                                 </div>
                             )}
 
+                            {riderStep === "plan" ? (
+                                <div className="flex flex-col gap-4">
+                                    <p className="text-sm text-[#5d5d5d]">
+                                        The best order to deliver these parcels, starting and ending at the station. Move stops up or down if needed, then assign.
+                                    </p>
+                                    <RoutePlanPanel
+                                        parcels={parcelsToPlan}
+                                        station={station}
+                                        onChange={(plan, order) => { setRoutePlan(plan); setAssignOrder(order); }}
+                                    />
+                                    <div className="flex justify-between gap-3 pt-4 border-t border-[#d1d1d1]">
+                                        <Button onClick={() => setRiderStep("rider")} variant="outline" className="border border-[#d1d1d1]">
+                                            Back
+                                        </Button>
+                                        <Button
+                                            onClick={handleAssignToRider}
+                                            disabled={isAssigning || (!routePlan && parcelsToPlan.some((p) => p.receiverLatitude != null))}
+                                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
+                                        >
+                                            {isAssigning ? (
+                                                <>
+                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                    Assigning...
+                                                </>
+                                            ) : (
+                                                `Assign ${selectedParcels.size} Parcel(s) to ${selectedRiderData?.name || "Rider"}`
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
                             <div className="flex flex-col gap-4">
                                 <p className="text-sm text-[#5d5d5d]">
                                     Select an available rider for the selected parcels
@@ -646,34 +707,24 @@ export const ParcelSelection = (): JSX.Element => {
                                         {selectedRider && (
                                             <div className="flex justify-end gap-3 pt-4 border-t border-[#d1d1d1]">
                                                 <Button
-                                                    onClick={() => {
-                                                        setShowRiderModal(false);
-                                                        setSelectedRider(null);
-                                                    }}
+                                                    onClick={closeRiderModal}
                                                     variant="outline"
                                                     className="border border-[#d1d1d1]"
                                                 >
                                                     Cancel
                                                 </Button>
                                                 <Button
-                                                    onClick={handleAssignToRider}
-                                                    disabled={isAssigning}
-                                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
+                                                    onClick={() => { setRoutePlan(null); setRiderStep("plan"); }}
+                                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
                                                 >
-                                                    {isAssigning ? (
-                                                        <>
-                                                            <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                            Assigning...
-                                                        </>
-                                                    ) : (
-                                                        `Assign ${selectedParcels.size} Parcel(s) to ${selectedRiderData?.name || "Rider"}`
-                                                    )}
+                                                    Next: plan route
                                                 </Button>
                                             </div>
                                         )}
                                     </>
                                 )}
                             </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>

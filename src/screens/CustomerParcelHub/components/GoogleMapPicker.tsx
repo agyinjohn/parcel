@@ -3,7 +3,7 @@ import { Crosshair, Loader2, MapPin, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import type { GpsCoordinates } from "../trackParcelUtils";
-import { ACCRA_CENTER, attachPlacesAutocomplete, createDeliveryMap, loadGoogleMaps } from "../../../utils/googleMaps";
+import { ACCRA_CENTER, attachPlacesAutocomplete, createDeliveryMap, loadGoogleMaps, onGoogleMapsAuthFailure } from "../../../utils/googleMaps";
 
 interface Props {
   coords: GpsCoordinates | null;
@@ -62,9 +62,17 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
         }
       });
 
+    const stopAuthWatch = onGoogleMapsAuthFailure(() => {
+      if (!cancelled) {
+        setMapError("The map is unavailable because Google rejected the Maps key. Please type the address instead.");
+        setLoading(false);
+      }
+    });
+
     return () => {
       cancelled = true;
       detachAutocomplete?.();
+      stopAuthWatch();
     };
   }, []);
 

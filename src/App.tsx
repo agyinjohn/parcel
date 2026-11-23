@@ -79,6 +79,7 @@ import { PartnerPortal } from "./screens/PartnerPortal/PartnerPortal";
 import { ParcelScan } from "./screens/ParcelScan/ParcelScan";
 import { AddressManagement } from "./screens/AddressManagement/AddressManagement";
 import { AdminFinancialDashboard } from "./screens/Admin/AdminFinancialDashboard";
+import { RiderMap } from "./screens/RiderMap";
 
 const PARCEL_ROLES = ["FRONTDESK", "MANAGER"];
 const DELIVERY_ROLES = ["MANAGER", "CALLER"];
@@ -153,6 +154,7 @@ export const App = (): JSX.Element => {
                               <Route path="/delivery/reconciliation-confirmation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ReconciliationConfirmation /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/analytics" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ReconciliationAnalytics /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/rider-detail" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><RiderDetail /></DeliveryLayout></ProtectedRoute>} />
+                              <Route path="/delivery/rider-map" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><RiderMap /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/financial" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><FinancialDashboard /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/fuel-requests" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><AdminFuelRequests /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/call-center" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><PreDeliveryQueue /></DeliveryLayout></ProtectedRoute>} />
@@ -183,6 +185,7 @@ export const App = (): JSX.Element => {
                               <Route path="/admin/financial" element={<Navigate to="/admin/dashboard" replace />} />
                               <Route path="/admin/financial-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><FinancialReports /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/system-logs" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><SystemLogs /></AdminLayout></ProtectedRoute>} />
+                              <Route path="/admin/rider-map" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><RiderMap /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/fuel-requests" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><AdminFuelRequests /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><TenantSettings /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/billing" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><Billing /></AdminLayout></ProtectedRoute>} />

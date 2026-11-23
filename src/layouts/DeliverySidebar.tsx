@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Edit } from "lucide-react";
+import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Map as MapIcon, Edit } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
 
@@ -15,6 +15,7 @@ const navItems = [
     { label: "Pickup Request", path: "/delivery/pickup", icon: Package, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Package Assignments", path: "/delivery/assignments", icon: ClipboardListIcon, roles: ["MANAGER"] },
     { label: "Active Deliveries", path: "/delivery/active", icon: TruckIcon, roles: ["MANAGER"] },
+    { label: "Rider Map", path: "/delivery/rider-map", icon: MapIcon, roles: ["MANAGER"] },
     { label: "Pre-Delivery", path: "/delivery/call-center", icon: PhoneIcon, roles: ["MANAGER", "CALLER"] },
     { label: "Home Delivery", path: "/delivery/call-center/home-delivery", icon: HomeIcon, roles: ["CALLER"] },
     { label: "Post-Delivery", path: "/delivery/call-center/follow-up", icon: CheckCircleIcon, roles: ["CALLER"] },

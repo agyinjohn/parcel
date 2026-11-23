@@ -5,7 +5,6 @@ import {
   Loader,
   PackageIcon,
   MapPinIcon,
-  Phone,
   ChevronDownIcon,
   ChevronRightIcon,
   UserIcon,
@@ -17,6 +16,10 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { formatPhoneNumber, formatCurrency, formatDateTime } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
+import {
+  VARIANCE_REASONS, type CollectionLine, type VarianceReason,
+  buildReconciliationItem, lineProblems, makeLine, sumVariance,
+} from "../../utils/reconciliation";
 import { useToast } from "../../components/ui/toast";
 import { ReconciliationHistory } from "../ReconciliationHistory/ReconciliationHistory";
 
@@ -84,6 +87,10 @@ export const Reconciliation = (): JSX.Element => {
     totalPages: 0,
   });
   const [view, setView] = useState<"reconcile" | "history">("reconcile");
+  // What the manager actually received, per parcel (key: assignmentId:parcelId). Empty = same as system.
+  const [collectedInput, setCollectedInput] = useState<Record<string, string>>({});
+  const [varianceReasons, setVarianceReasons] = useState<Record<string, { reason?: VarianceReason | ""; note?: string }>>({});
+  const lineKey = (assignmentId: string, parcelId: string) => `${assignmentId}:${parcelId}`;
 
   // Fetch all parcel assignments with pagination (fetch at least 200)
   const fetchAssignments = async (page: number = 0, size: number = 200) => {
@@ -267,6 +274,24 @@ export const Reconciliation = (): JSX.Element => {
   }, [rawAssignments]);
 
   // Calculate totals for selected assignments
+  /** Per-parcel lines (system vs collected) for each assignment, and any problems blocking confirmation. */
+  const linesByGroup = useMemo(() => {
+    const out = new Map<string, { lines: CollectionLine[]; problems: Record<string, string>; variance: number }>();
+    riderGroups.forEach((g) => {
+      const lines: CollectionLine[] = [];
+      const problems: Record<string, string> = {};
+      g.deliveredParcels.forEach((p) => {
+        const key = lineKey(g.assignmentId, p.parcelId);
+        const line = makeLine(p.parcelId, p.parcelAmount, collectedInput[key], varianceReasons[key]);
+        const problem = lineProblems(line, p.parcelId);
+        if (problem) problems[p.parcelId] = problem;
+        if (line) lines.push(line);
+      });
+      out.set(g.assignmentId, { lines, problems, variance: sumVariance(lines) });
+    });
+    return out;
+  }, [riderGroups, collectedInput, varianceReasons]);
+
   const selectedRidersData = useMemo(() => {
     return riderGroups.filter(group => selectedRiders.has(group.assignmentId));
   }, [riderGroups, selectedRiders]);
@@ -274,6 +299,15 @@ export const Reconciliation = (): JSX.Element => {
   const totalAmount = useMemo(() => {
     return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredAmount, 0);
   }, [selectedRidersData]);
+
+  const totalVariance = useMemo(
+    () => selectedRidersData.reduce((sum, g) => sum + (linesByGroup.get(g.assignmentId)?.variance ?? 0), 0),
+    [selectedRidersData, linesByGroup]
+  );
+  const blockingProblems = useMemo(
+    () => selectedRidersData.flatMap((g) => Object.entries(linesByGroup.get(g.assignmentId)?.problems ?? {}).map(([parcelId, msg]) => ({ rider: g.riderName, parcelId, msg }))),
+    [selectedRidersData, linesByGroup]
+  );
 
   const totalParcels = useMemo(() => {
     return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredCount, 0);
@@ -317,23 +351,22 @@ export const Reconciliation = (): JSX.Element => {
       return;
     }
 
+    if (blockingProblems.length > 0) {
+      showToast(`Give a reason for every difference first (${blockingProblems.length} left)`, "error");
+      return;
+    }
+
     setIsReconciling(true);
     try {
       // Build reconciliation payload with assignmentId, reconciledAt, and payedAmount
-      const reconciliationPayload: Array<{
-        assignmentId: string;
-        reconciledAt: number;
-        payedAmount: number;
-      }> = [];
+      const reconciliationPayload: Array<ReturnType<typeof buildReconciliationItem>> = [];
 
       selectedRidersData.forEach(group => {
-        // Use assignmentId and computed expectedAmount (what rider is expected to pay back)
+        // payedAmount = what the system expected, adjusted by the differences the manager entered per parcel.
         if (group.expectedAmount > 0) {
-          reconciliationPayload.push({
-            assignmentId: group.assignmentId,
-            reconciledAt: Date.now(), // Current timestamp in milliseconds
-            payedAmount: group.expectedAmount,
-          });
+          reconciliationPayload.push(
+            buildReconciliationItem(group.assignmentId, group.expectedAmount, linesByGroup.get(group.assignmentId)?.lines ?? [])
+          );
         }
       });
 
@@ -343,6 +376,8 @@ export const Reconciliation = (): JSX.Element => {
       if (response.success) {
         showToast(`Successfully reconciled ${selectedRiders.size} rider(s) with ${totalParcels} parcel(s)`, "success");
         setSelectedRiders(new Set());
+        setCollectedInput({});
+        setVarianceReasons({});
         await fetchAssignments(pagination.page, pagination.size);
         setShowConfirmModal(false);
       } else {
@@ -407,7 +442,7 @@ export const Reconciliation = (): JSX.Element => {
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
               <CardContent className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <div>
                       <p className="text-sm text-gray-600 mb-1">Riders Selected</p>
                       <p className="text-2xl font-bold text-[#ea690c]">{selectedRiders.size}</p>
@@ -419,6 +454,19 @@ export const Reconciliation = (): JSX.Element => {
                     <div>
                       <p className="text-sm text-gray-600 mb-1">Total Amount</p>
                       <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Collected</p>
+                      <p className="text-2xl font-bold text-neutral-800">{formatCurrency(totalAmount + totalVariance)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Variance</p>
+                      <p className={`text-2xl font-bold ${totalVariance < 0 ? "text-red-600" : totalVariance > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                        {totalVariance > 0 ? "+" : ""}{formatCurrency(totalVariance)}
+                      </p>
+                      {blockingProblems.length > 0 && (
+                        <p className="text-xs text-red-600 mt-0.5">{blockingProblems.length} need a reason</p>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -477,6 +525,7 @@ export const Reconciliation = (): JSX.Element => {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Parcels</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Exp Amount</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Collected</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivery Cost</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Inbound Cost</th>
                       </tr>
@@ -547,6 +596,21 @@ export const Reconciliation = (): JSX.Element => {
                                 </div>
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                {(() => {
+                                  const v = linesByGroup.get(group.assignmentId)?.variance ?? 0;
+                                  const missing = Object.keys(linesByGroup.get(group.assignmentId)?.problems ?? {}).length;
+                                  return (
+                                    <>
+                                      <div className="text-sm font-bold text-neutral-800">{formatCurrency(group.totalDeliveredAmount + v)}</div>
+                                      <div className={`text-xs ${v < 0 ? "text-red-600" : v > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                                        {v === 0 ? "No variance" : `${v > 0 ? "+" : ""}${formatCurrency(v)} variance`}
+                                        {missing > 0 && <span className="text-red-600"> · {missing} need a reason</span>}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <div className="text-sm font-bold text-green-600">
                                   {formatCurrency(group.deliveredDeliveryCost)}
                                 </div>
@@ -560,7 +624,7 @@ export const Reconciliation = (): JSX.Element => {
                             {/* Expanded Parcels Rows */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={7} className="px-0 py-0">
+                                <td colSpan={8} className="px-0 py-0">
                                   <div className="bg-gray-50 border-t border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -568,11 +632,12 @@ export const Reconciliation = (): JSX.Element => {
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Recipient</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Location</th>
-                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Amount</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">System</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Collected (GHC)</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Variance / reason</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Delivery Fee</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Inbound Fee</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
-                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Actions</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Details</th>
                                         </tr>
                                       </thead>
@@ -623,6 +688,53 @@ export const Reconciliation = (): JSX.Element => {
                                                 {formatCurrency(parcel.parcelAmount)}
                                               </div>
                                             </td>
+                                            {(() => {
+                                              const key = lineKey(group.assignmentId, parcel.parcelId);
+                                              const line = linesByGroup.get(group.assignmentId)?.lines.find((l) => l.parcelId === parcel.parcelId);
+                                              const problem = linesByGroup.get(group.assignmentId)?.problems[parcel.parcelId];
+                                              const r = varianceReasons[key] ?? {};
+                                              return (
+                                                <>
+                                                  <td className="px-4 py-3 whitespace-nowrap">
+                                                    <input
+                                                      type="number" min="0" step="0.5" inputMode="decimal"
+                                                      value={collectedInput[key] ?? ""}
+                                                      placeholder={String(parcel.parcelAmount)}
+                                                      onChange={(e) => setCollectedInput((c) => ({ ...c, [key]: e.target.value }))}
+                                                      className={`w-24 h-8 px-2 rounded border text-sm ${problem && !line ? "border-red-400" : "border-gray-300"} focus:outline-none focus:ring-2 focus:ring-[#ea690c]/30`}
+                                                      aria-label={`Amount collected for ${parcel.receiverName ?? parcel.parcelId}`}
+                                                    />
+                                                  </td>
+                                                  <td className="px-4 py-3 min-w-[220px]">
+                                                    {!line || line.variance === 0 ? (
+                                                      <span className="text-xs text-gray-400">{line ? "—" : problem}</span>
+                                                    ) : (
+                                                      <div className="space-y-1">
+                                                        <div className={`text-sm font-semibold ${line.variance < 0 ? "text-red-600" : "text-amber-600"}`}>
+                                                          {line.variance > 0 ? "+" : ""}{formatCurrency(line.variance)}
+                                                        </div>
+                                                        <select
+                                                          value={r.reason ?? ""}
+                                                          onChange={(e) => setVarianceReasons((v) => ({ ...v, [key]: { ...v[key], reason: e.target.value as VarianceReason } }))}
+                                                          className={`w-full h-8 px-2 rounded border text-xs bg-white ${problem && !r.reason ? "border-red-400" : "border-gray-300"}`}
+                                                          aria-label="Reason for the difference"
+                                                        >
+                                                          <option value="">Reason for the difference…</option>
+                                                          {VARIANCE_REASONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                                                        </select>
+                                                        <input
+                                                          value={r.note ?? ""}
+                                                          onChange={(e) => setVarianceReasons((v) => ({ ...v, [key]: { ...v[key], note: e.target.value } }))}
+                                                          placeholder={r.reason === "Other" ? "Explain (required)" : "Note (optional)"}
+                                                          className={`w-full h-8 px-2 rounded border text-xs ${problem && r.reason === "Other" ? "border-red-400" : "border-gray-300"}`}
+                                                          aria-label="Note about the difference"
+                                                        />
+                                                      </div>
+                                                    )}
+                                                  </td>
+                                                </>
+                                              );
+                                            })()}
                                             <td className="px-4 py-3 whitespace-nowrap">
                                               <div className="text-sm font-semibold text-green-600">
                                                 {formatCurrency(parcel.deliveryCost || 0)}
@@ -637,20 +749,6 @@ export const Reconciliation = (): JSX.Element => {
                                               <Badge className={`${parcel.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' : parcel.paymentMethod === 'momo' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'} border text-xs`}>
                                                 {parcel.paymentMethod || 'N/A'}
                                               </Badge>
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap">
-                                              <div className="flex items-center gap-2">
-                                                {parcel.receiverPhoneNumber && (
-                                                  <Button
-                                                    onClick={() => window.location.href = `tel:${parcel.receiverPhoneNumber}`}
-                                                    variant="outline"
-                                                    className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
-                                                    title={`Call ${parcel.receiverName || 'recipient'}`}
-                                                  >
-                                                    <Phone className="w-3.5 h-3.5" />
-                                                  </Button>
-                                                )}
-                                              </div>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                               <Button
@@ -830,8 +928,23 @@ export const Reconciliation = (): JSX.Element => {
                     <p className="text-sm text-blue-800">
                       Total Amount: <span className="font-bold">{formatCurrency(totalAmount)}</span>
                     </p>
+                    <p className="text-sm text-blue-800">
+                      Collected: <span className="font-bold">{formatCurrency(totalAmount + totalVariance)}</span>
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Variance: <span className={`font-bold ${totalVariance < 0 ? "text-red-700" : totalVariance > 0 ? "text-amber-700" : ""}`}>{totalVariance > 0 ? "+" : ""}{formatCurrency(totalVariance)}</span>
+                    </p>
                   </div>
                 </div>
+
+                {blockingProblems.length > 0 && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    <p className="font-semibold mb-1">Give a reason for each difference before confirming:</p>
+                    <ul className="list-disc pl-5 space-y-0.5">
+                      {blockingProblems.slice(0, 6).map((b) => <li key={b.parcelId}>{b.rider}, {b.parcelId}: {b.msg}</li>)}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm">
@@ -840,6 +953,7 @@ export const Reconciliation = (): JSX.Element => {
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Rider</th>
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Parcels</th>
                         <th className="px-3 py-2 text-right font-semibold text-gray-700">Amount</th>
+                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Collected</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -848,6 +962,9 @@ export const Reconciliation = (): JSX.Element => {
                           <td className="px-3 py-2 font-semibold">{group.riderName}</td>
                           <td className="px-3 py-2">{group.totalDeliveredCount} delivered</td>
                           <td className="px-3 py-2 text-right font-semibold">{formatCurrency(group.totalDeliveredAmount)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">
+                            {formatCurrency(group.totalDeliveredAmount + (linesByGroup.get(group.assignmentId)?.variance ?? 0))}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -864,7 +981,7 @@ export const Reconciliation = (): JSX.Element => {
                   </Button>
                   <Button
                     onClick={handleReconcile}
-                    disabled={isReconciling}
+                    disabled={isReconciling || blockingProblems.length > 0}
                     className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                   >
                     {isReconciling ? (

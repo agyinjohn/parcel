@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import authService from './authService';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, API_V2 } from '../config/api';
 
 const API_BASE_URL_FRONTDESK = API_ENDPOINTS.FRONTDESK;
 
@@ -63,6 +63,13 @@ interface ParcelRequest {
     riderId?: string;
     itemCost?: number;
     itemOwnerPaid?: boolean;
+
+    // Pinned delivery location (home delivery). New backend fields: see docs/BACKEND_HANDOFF.md
+    receiverLatitude?: number;
+    receiverLongitude?: number;
+    receiverLocationName?: string;
+    receiverPlaceId?: string;
+    receiverLocationSource?: "SEARCH" | "MAP_PIN";
 }
 
 interface ParcelUpdateRequest {
@@ -90,6 +97,12 @@ interface ParcelUpdateRequest {
     homeDelivery?: boolean;
     images?: string[];
     parcelWeight?: number;
+    // Pinned delivery location; null clears it (docs/BACKEND_HANDOFF.md, Part A2)
+    receiverLatitude?: number | null;
+    receiverLongitude?: number | null;
+    receiverLocationName?: string | null;
+    receiverPlaceId?: string | null;
+    receiverLocationSource?: "SEARCH" | "MAP_PIN" | null;
 }
 
 interface ParcelResponse {
@@ -147,6 +160,12 @@ interface ParcelResponse {
     followUpAt?: number;
     deliveryDate?: number;
     officeName?: string;
+    // Pinned delivery location (new backend fields); null when cleared
+    receiverLatitude?: number | null;
+    receiverLongitude?: number | null;
+    receiverLocationName?: string | null;
+    receiverPlaceId?: string | null;
+    receiverLocationSource?: "SEARCH" | "MAP_PIN" | null;
 }
 
 interface PageParcelResponse {
@@ -159,6 +178,22 @@ interface PageParcelResponse {
     number: number;
     numberOfElements: number;
     empty: boolean;
+}
+
+/** Planned route sent with an assignment and returned on it (docs/BACKEND_HANDOFF.md Part F). */
+export interface AssignmentRoutePlan {
+    method: "GOOGLE" | "ESTIMATE";
+    /** Parcel ids in visiting order (pinned ones only). */
+    stopOrder: string[];
+    totalKm: number;
+    totalMinutes: number;
+    legs: Array<{ from: string; to: string; km: number; minutes: number }>;
+    /** Route line in Google's encoded polyline format. */
+    encodedPath: string;
+    startLatitude?: number;
+    startLongitude?: number;
+    edited: boolean;
+    plannedAt: number;
 }
 
 interface DeliveryAssignmentRequest {
@@ -496,11 +531,16 @@ class FrontdeskService {
     /**
      * Assign parcels to a rider
      */
-    async assignParcelsToRider(riderId: string, parcelIds: string[]): Promise<ApiResponse> {
+    /**
+     * Assign parcels to a rider. `parcelIds` are in planned stop order; `routePlan` is the plan
+     * the manager confirmed (new backend field, docs/BACKEND_HANDOFF.md Part F).
+     */
+    async assignParcelsToRider(riderId: string, parcelIds: string[], routePlan?: AssignmentRoutePlan): Promise<ApiResponse> {
         try {
             const response = await this.apiClient.post<{ message: string }>('/assign-parcels', {
                 riderId,
                 parcelIds,
+                ...(routePlan ? { routePlan } : {}),
             });
             return {
                 success: true,
@@ -512,6 +552,19 @@ class FrontdeskService {
                 success: false,
                 message: error.response?.data?.message || 'Failed to assign parcels. Please try again.',
             };
+        }
+    }
+
+    /**
+     * Manager: set the pickup-request charge for their own station.
+     * Proposed endpoint PUT /api-frontdesk/office/pickup-charge (handoff Part J).
+     */
+    async updateStationPickupCharge(enabled: boolean, amount: number | null): Promise<ApiResponse> {
+        try {
+            await this.apiClient.put('/office/pickup-charge', { pickupChargeEnabled: enabled, pickupChargeAmount: amount });
+            return { success: true, message: 'Pickup charge saved' };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to save the pickup charge.' };
         }
     }
 
@@ -707,13 +760,30 @@ class FrontdeskService {
         assignmentId: string;
         reconciledAt: number | string;
         payedAmount: number | string;
+        /** Proposed (handoff Part K): what the system expected, the total difference and per-parcel lines. */
+        expectedAmount?: number;
+        varianceAmount?: number;
+        lines?: Array<{ parcelId: string; systemAmount: number; collectedAmount: number; variance: number; varianceReason?: string; varianceNote?: string }>;
     }>): Promise<ApiResponse> {
         try {
-            // Convert to format expected by API (strings for payedAmount and reconciledAt)
+            if (API_V2) {
+                // Updated backend: ReconciliationBatchRequest { items: [...] } with numbers.
+                const items = reconciliationData.map(item => ({
+                    assignmentId: item.assignmentId,
+                    reconciledAt: Number(item.reconciledAt),
+                    payedAmount: Number(item.payedAmount),
+                    ...(item.lines ? { expectedAmount: item.expectedAmount, varianceAmount: item.varianceAmount, lines: item.lines } : {}),
+                }));
+                const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', { items });
+                return { success: true, message: response.data?.message || 'Reconciliation completed successfully' };
+            }
+
+            // Current backend: strings for payedAmount and reconciledAt
             const formattedData = reconciliationData.map(item => ({
                 assignmentId: item.assignmentId,
                 reconciledAt: String(item.reconciledAt),
                 payedAmount: String(item.payedAmount),
+                ...(item.lines ? { expectedAmount: item.expectedAmount, varianceAmount: item.varianceAmount, lines: item.lines } : {}),
             }));
 
             // If only one item, send as single object (matching Postman format)
@@ -942,12 +1012,12 @@ class FrontdeskService {
 
     /**
      * Pay driver assignments (mark as paid)
-     * Endpoint: POST /driver-assignments/pay
+     * Endpoint: PUT /driver-assignments/pay (PUT per the backend spec)
      * Body: array of assignment IDs
      */
     async payDriverAssignments(assignmentIds: string[]): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.post<{ message: string }>('/driver-assignments/pay', assignmentIds);
+            const response = await this.apiClient.put<{ message: string }>('/driver-assignments/pay', assignmentIds);
             return {
                 success: true,
                 message: response.data.message || 'Driver assignments marked as paid successfully',

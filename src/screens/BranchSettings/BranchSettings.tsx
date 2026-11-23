@@ -1,13 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useBranding } from "../../contexts/BrandingContext";
 import { useToast } from "../../components/ui/toast";
 import { cn } from "../../lib/utils";
+import { Switch } from "../../components/ui/switch";
+import { useStation } from "../../contexts/StationContext";
+import { useLocation as useLocations } from "../../contexts/LocationContext";
+import frontdeskService from "../../services/frontdeskService";
 import {
     AlertCircle, Building2, Clock, ImageIcon, Mail, Paintbrush,
-    Phone, Printer, RotateCcw, Save, UploadCloud,
+    Phone, Printer, RotateCcw, Save, UploadCloud, Banknote, Loader,
 } from "lucide-react";
 
 const inputCls =
@@ -17,12 +21,13 @@ const inputCls =
 const labelCls = "text-[13px] font-medium text-neutral-700 mb-1.5 block";
 const hintCls = "text-xs text-[#9a9a9a] mt-1.5";
 
-type TabId = "identity" | "info" | "print";
+type TabId = "identity" | "info" | "print" | "charges";
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "identity", label: "Visual Identity", icon: Paintbrush },
     { id: "info", label: "Branch Info", icon: Building2 },
     { id: "print", label: "Printing", icon: Printer },
+    { id: "charges", label: "Charges", icon: Banknote },
 ];
 
 interface IconInputProps extends React.ComponentProps<typeof Input> {
@@ -160,7 +165,7 @@ export const BranchSettings = (): JSX.Element => {
                             </div>
                         )}
                     </div>
-                    <div className="flex flex-shrink-0 items-center gap-2.5">
+                    <div className={cn("flex flex-shrink-0 items-center gap-2.5", activeTab === "charges" && "invisible")}>
                         <Button
                             type="button"
                             variant="outline"
@@ -201,6 +206,8 @@ export const BranchSettings = (): JSX.Element => {
 
                 {/* ── Panel ── */}
                 <div className="rounded-2xl border border-[#e3e3e3] bg-white p-5 shadow-sm sm:p-7">
+
+                    {activeTab === "charges" && <ChargesPanel />}
 
                     {/* ═══ Visual Identity ═══ */}
                     {activeTab === "identity" && (
@@ -502,6 +509,77 @@ export const BranchSettings = (): JSX.Element => {
                     )}
                 </div>
             </div>
+        </div>
+    );
+};
+
+/**
+ * Station charges, saved to the backend (unlike the branding tabs, which are stored in the browser).
+ * Proposed endpoint PUT /api-frontdesk/office/pickup-charge (docs/BACKEND_HANDOFF.md Part J).
+ */
+const ChargesPanel = () => {
+    const { userOfficeId, userOfficeName } = useStation();
+    const { stations, refreshLocations } = useLocations();
+    const { showToast } = useToast();
+    const station = stations.find((st) => st.id === userOfficeId);
+    const [enabled, setEnabled] = useState(false);
+    const [amount, setAmount] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        setEnabled(!!station?.pickupChargeEnabled);
+        setAmount(station?.pickupChargeAmount != null ? String(station.pickupChargeAmount) : "");
+    }, [station?.pickupChargeEnabled, station?.pickupChargeAmount]);
+
+    const dirty = enabled !== !!station?.pickupChargeEnabled
+        || (enabled && amount !== (station?.pickupChargeAmount != null ? String(station.pickupChargeAmount) : ""));
+
+    const save = async () => {
+        const value = amount.trim() === "" ? null : Number(amount);
+        if (enabled && (value === null || !Number.isFinite(value) || value <= 0)) {
+            showToast("Enter the pickup charge, or switch it off", "error");
+            return;
+        }
+        setSaving(true);
+        const res = await frontdeskService.updateStationPickupCharge(enabled, enabled ? value : null);
+        setSaving(false);
+        if (res.success) {
+            showToast(enabled ? `Pickup charge set to GHC ${value!.toFixed(2)}` : "Pickup charge switched off", "success");
+            await refreshLocations();
+        } else showToast(res.message, "error");
+    };
+
+    return (
+        <div className="max-w-xl space-y-5">
+            <div>
+                <h2 className="text-base font-semibold text-neutral-900">Pickup charge</h2>
+                <p className="text-sm text-[#5d5d5d] mt-1">
+                    The amount filled in automatically when staff at {userOfficeName ?? "this station"} create a Pickup Request
+                    (a rider collecting a parcel from a sender). Staff can still change it on a request.
+                </p>
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#e3e3e3] p-4">
+                <div>
+                    <p className="text-sm font-medium text-neutral-800">Charge for pickups at this station</p>
+                    <p className="text-xs text-[#9a9a9a] mt-0.5">Switch off if this station doesn't charge for pickups.</p>
+                </div>
+                <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Charge for pickups at this station" />
+            </div>
+            {enabled && (
+                <div>
+                    <Label className={labelCls}>Amount per pickup (GHC)</Label>
+                    <Input
+                        type="number" min="0" step="0.5" inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="e.g. 10"
+                        className={cn(inputCls, "w-48")}
+                    />
+                </div>
+            )}
+            <Button onClick={save} disabled={!dirty || saving} className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 flex items-center gap-2">
+                {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save charge
+            </Button>
         </div>
     );
 };

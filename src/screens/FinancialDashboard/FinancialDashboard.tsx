@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DollarSignIcon, TrendingUpIcon, CreditCardIcon, UserCheckIcon, CalendarIcon, DownloadIcon } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -6,33 +6,82 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
 import { useStation } from "../../contexts/StationContext";
-import { calculateFinancialSummary, getDriverFinancials } from "../../data/mockData";
-import { FinancialSummary, DriverFinancial } from "../../types";
+import adminService, { RiderLeaderboardEntry } from "../../services/adminService";
+import { FinancialSummary, DriverFinancial, PaymentStatus } from "../../types";
 import { formatCurrency } from "../../utils/dataHelpers";
 
+// Map a rider leaderboard row onto the table's existing columns.
+const toDriverFinancial = (r: RiderLeaderboardEntry, stationId: string): DriverFinancial => {
+    const totalEarned = r.revenue || 0;
+    const outstandingBalance = r.outstanding || 0;
+    const amountPaid = Math.max(0, totalEarned - outstandingBalance);
+    const paymentStatus: PaymentStatus =
+        outstandingBalance <= 0 ? "paid" : amountPaid > 0 ? "partial" : "pending";
+    return {
+        driverId: r.riderId,
+        driverName: r.riderName,
+        stationId,
+        deliveriesCompleted: r.deliveries || 0,
+        totalEarned,
+        amountPaid,
+        outstandingBalance,
+        paymentStatus,
+    };
+};
+
+// <input type="date"> gives "YYYY-MM-DD"; the API wants epoch ms covering whole local days.
+const startOfDay = (d: string) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day).getTime(); };
+const endOfDay = (d: string) => startOfDay(d) + 24 * 60 * 60 * 1000 - 1;
+
 export const FinancialDashboard = (): JSX.Element => {
-    const { currentStation, userRole } = useStation();
+    const { userRole, isAdmin, userOfficeId, userOfficeName } = useStation();
     const [financialData, setFinancialData] = useState<FinancialSummary | null>(null);
     const [driverBreakdown, setDriverBreakdown] = useState<DriverFinancial[]>([]);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [dateRange, setDateRange] = useState<{ from: string; to: string } | undefined>(undefined);
     const [showDateFilter, setShowDateFilter] = useState(false);
     const [fromDate, setFromDate] = useState("");
     const [toDate, setToDate] = useState("");
 
-    useEffect(() => {
-        if (currentStation || userRole === "ADMIN") {
-            const summary = calculateFinancialSummary(
-                userRole === "ADMIN" ? undefined : currentStation?.id,
-                dateRange
-            );
-            setFinancialData(summary);
+    // Admins see every station; everyone else is scoped to their own office.
+    const officeId = isAdmin ? undefined : userOfficeId ?? undefined;
 
-            const drivers = getDriverFinancials(
-                userRole === "ADMIN" ? undefined : currentStation?.id
-            );
-            setDriverBreakdown(drivers);
+    const loadFinancials = useCallback(async () => {
+        setLoadError(null);
+        const filters = {
+            officeId,
+            startDate: dateRange ? startOfDay(dateRange.from) : undefined,
+            endDate: dateRange ? endOfDay(dateRange.to) : undefined,
+        };
+        const [revenue, riders] = await Promise.all([
+            adminService.getRevenueDashboard(filters),
+            adminService.getRiderPerformanceDashboard(filters),
+        ]);
+
+        if (!revenue.success || !revenue.data) {
+            setFinancialData(null);
+            setLoadError(revenue.message || "Failed to load financial data.");
+            return;
         }
-    }, [currentStation, userRole, dateRange]);
+        const r = revenue.data;
+        setFinancialData({
+            stationId: officeId,
+            totalDeliveryEarnings: r.totalRevenue || 0,
+            totalItemCollections: r.collected || 0,
+            totalDriverPayments: r.driverPayments || 0,
+            pendingPayments: r.outstanding || 0,
+            netRevenue: (r.collected || 0) - (r.driverPayments || 0),
+            dateRange,
+        });
+        // The table is secondary: if this call fails, the cards still show and the table says "No driver data".
+        setDriverBreakdown(
+            riders.success ? (riders.data?.riderLeaderboard ?? []).map((row) => toDriverFinancial(row, officeId ?? "")) : []
+        );
+    }, [officeId, dateRange]);
+
+    useEffect(() => {
+        loadFinancials();
+    }, [loadFinancials]);
 
     const handleApplyDateFilter = () => {
         if (fromDate && toDate) {
@@ -86,7 +135,20 @@ export const FinancialDashboard = (): JSX.Element => {
             <div className="w-full">
                 <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                     <div className="text-center py-12">
-                        <p className="text-neutral-700">Loading financial data...</p>
+                        {loadError ? (
+                            <>
+                                <p className="text-neutral-700">{loadError}</p>
+                                <Button
+                                    onClick={() => { setLoadError(null); loadFinancials(); }}
+                                    variant="outline"
+                                    className="mt-4 border border-[#d1d1d1]"
+                                >
+                                    Try again
+                                </Button>
+                            </>
+                        ) : (
+                            <p className="text-neutral-700">Loading financial data...</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -102,7 +164,7 @@ export const FinancialDashboard = (): JSX.Element => {
                         <div>
                             <h1 className="text-2xl font-bold text-neutral-800">Financial Dashboard</h1>
                             <p className="text-sm text-[#5d5d5d] mt-1">
-                                {userRole === "ADMIN" ? "System-wide financial overview" : `${currentStation?.name} - Financial Overview`}
+                                {isAdmin || userRole === "ADMIN" ? "System-wide financial overview" : `${userOfficeName ?? "Your station"} - Financial Overview`}
                             </p>
                         </div>
                         <div className="flex gap-2">
@@ -187,7 +249,7 @@ export const FinancialDashboard = (): JSX.Element => {
                                         <h3 className="text-2xl font-bold text-neutral-800">
                                             {formatCurrency(financialData.totalDeliveryEarnings)}
                                         </h3>
-                                        <p className="text-xs text-[#9a9a9a]">From delivery fees</p>
+                                        <p className="text-xs text-[#9a9a9a]">Total charged on parcels</p>
                                     </div>
                                     <DollarSignIcon className="w-12 h-12 text-[#ea690c] opacity-20" />
                                 </div>
@@ -202,7 +264,7 @@ export const FinancialDashboard = (): JSX.Element => {
                                         <h3 className="text-2xl font-bold text-neutral-800">
                                             {formatCurrency(financialData.totalItemCollections)}
                                         </h3>
-                                        <p className="text-xs text-[#9a9a9a]">From item values</p>
+                                        <p className="text-xs text-[#9a9a9a]">Payments received</p>
                                     </div>
                                     <CreditCardIcon className="w-12 h-12 text-blue-500 opacity-20" />
                                 </div>

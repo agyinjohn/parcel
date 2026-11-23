@@ -9,6 +9,7 @@ import { COUNTRY_CODES, getCountryName, getRegionsByCountry } from "../../../dat
 import locationService from "../../../services/locationService";
 import { useLocation } from "../../../contexts/LocationContext";
 import { useToast } from "../../../components/ui/toast";
+import { Switch } from "../../../components/ui/switch";
 
 interface Station {
     id: string;
@@ -18,6 +19,8 @@ interface Station {
     locationName: string;
     managerName: string;
     createdAt: number;
+    pickupChargeEnabled?: boolean | null;
+    pickupChargeAmount?: number | null;
 }
 
 interface Location {
@@ -42,6 +45,10 @@ export const StationManagement = (): JSX.Element => {
     const [showEditStationModal, setShowEditStationModal] = useState(false);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [editingStation, setEditingStation] = useState<Station | null>(null);
+    // Pickup-request charge for the station being edited.
+    const [pickupEnabled, setPickupEnabled] = useState(false);
+    const [pickupAmount, setPickupAmount] = useState("");
+    const [savingStation, setSavingStation] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
     const [isCreatingLocation, setIsCreatingLocation] = useState(false);
     const [locationFormData, setLocationFormData] = useState({
@@ -233,22 +240,42 @@ export const StationManagement = (): JSX.Element => {
             managerName: station.managerName,
             locationId: "",
         });
+        setPickupEnabled(!!station.pickupChargeEnabled);
+        setPickupAmount(station.pickupChargeAmount != null ? String(station.pickupChargeAmount) : "");
         setShowEditStationModal(true);
     };
 
     // Save edited station
-    const handleSaveEditStation = () => {
+    const handleSaveEditStation = async () => {
+        if (!editingStation) return;
         if (!stationFormData.name.trim() || !stationFormData.code.trim()) {
             showToast("Station name and code are required", "error");
             return;
         }
+        const amount = pickupAmount.trim() === "" ? null : Number(pickupAmount);
+        if (pickupEnabled && (amount === null || !Number.isFinite(amount) || amount <= 0)) {
+            showToast("Enter the pickup charge, or switch it off", "error");
+            return;
+        }
 
+        setSavingStation(true);
+        // PUT /api-admin/office/{id}. Code and manager name aren't in OfficeUpdateRequest, so they're not sent.
+        const res = await locationService.updateStation(editingStation.id, {
+            name: stationFormData.name.trim(),
+            address: stationFormData.address.trim(),
+            pickupChargeEnabled: pickupEnabled,
+            pickupChargeAmount: pickupEnabled ? amount : null,
+        });
+        setSavingStation(false);
+        if (!res.success) {
+            showToast(res.message, "error");
+            return;
+        }
         showToast(`Station "${stationFormData.name}" updated successfully!`, "success");
         setShowEditStationModal(false);
         setEditingStation(null);
         setStationFormData({ name: "", code: "", address: "", managerName: "", locationId: "" });
-        // In a real implementation, call: await locationService.updateStation(editingStation.id, stationFormData);
-        // Then refresh: await refreshLocations();
+        await refreshLocations();
     };
 
     // Initiate delete with confirmation modal
@@ -598,10 +625,32 @@ export const StationManagement = (): JSX.Element => {
                                             />
                                         </div>
 
+                                        <div className="rounded-lg border border-[#d1d1d1] p-3 space-y-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <Label className="block text-sm font-semibold text-neutral-800">Pickup charge</Label>
+                                                    <p className="text-xs text-[#5d5d5d]">Filled in automatically on Pickup Requests at this station. Switch off for stations that don't charge for pickups.</p>
+                                                </div>
+                                                <Switch checked={pickupEnabled} onCheckedChange={setPickupEnabled} aria-label="Charge for pickups at this station" />
+                                            </div>
+                                            {pickupEnabled && (
+                                                <div>
+                                                    <Label className="block text-xs font-medium text-neutral-700 mb-1">Amount per pickup (GHC)</Label>
+                                                    <Input
+                                                        type="number" min="0" step="0.5" inputMode="decimal"
+                                                        value={pickupAmount}
+                                                        onChange={(e) => setPickupAmount(e.target.value)}
+                                                        placeholder="e.g. 10"
+                                                        className="border border-[#d1d1d1] w-40"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <div className="flex gap-3 pt-4">
                                             <Button
                                                 onClick={handleSaveEditStation}
-                                                disabled={!stationFormData.name.trim() || !stationFormData.code.trim()}
+                                                disabled={savingStation || !stationFormData.name.trim() || !stationFormData.code.trim()}
                                                 className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
                                             >
                                                 Save Changes
@@ -831,6 +880,9 @@ export const StationManagement = (): JSX.Element => {
                                                             </td>
                                                             <td className="px-4 py-3 text-center">
                                                                 <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
+                                                                <p className="text-[11px] text-[#9a9a9a] mt-1 whitespace-nowrap">
+                                                                    {station.pickupChargeEnabled ? `Pickup GHC ${Number(station.pickupChargeAmount ?? 0).toFixed(2)}` : station.pickupChargeEnabled === false ? "No pickup charge" : ""}
+                                                                </p>
                                                             </td>
                                                             <td className="px-4 py-3">
                                                                 <div className="flex items-center justify-center gap-1">

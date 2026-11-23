@@ -31,6 +31,11 @@ interface ReconciliationParcel {
   cancelled?: boolean;
   returned?: boolean;
   paymentMethod?: string | null;
+  /** What the manager recorded at reconciliation (handoff Part K); undefined for older records. */
+  managerAmount?: number;
+  variance?: number;
+  varianceReason?: string;
+  varianceNote?: string;
 }
 
 interface RiderGroup {
@@ -45,6 +50,8 @@ interface RiderGroup {
   totalFailedAmount: number;
   expectedAmount: number;
   assignmentIds: string[];
+  /** Sum of what the manager recorded as handed over, when available. */
+  managerAmount?: number;
 }
 
 export const AdminReconciliation = (): JSX.Element => {
@@ -307,7 +314,9 @@ export const AdminReconciliation = (): JSX.Element => {
 
       if (assignment.assignmentId && !group.assignmentIds.includes(assignment.assignmentId)) {
         group.assignmentIds.push(assignment.assignmentId);
+        if (assignment.amountPayed != null) group.managerAmount = (group.managerAmount ?? 0) + Number(assignment.amountPayed);
       }
+      const lines: any[] = Array.isArray(assignment.reconciliationLines) ? assignment.reconciliationLines : [];
 
       if (assignment.parcels && Array.isArray(assignment.parcels)) {
         assignment.parcels.forEach((parcel: any) => {
@@ -328,6 +337,12 @@ export const AdminReconciliation = (): JSX.Element => {
               cancelled: false,
               returned: false,
               paymentMethod: parcel.paymentMethod,
+              ...(() => {
+                const line = lines.find((l) => l.parcelId === parcel.parcelId);
+                return line
+                  ? { managerAmount: Number(line.collectedAmount), variance: Number(line.variance), varianceReason: line.varianceReason, varianceNote: line.varianceNote }
+                  : {};
+              })(),
             });
             group.totalDeliveredAmount += amount;
             group.totalDeliveredCount++;
@@ -888,7 +903,13 @@ export const AdminReconciliation = (): JSX.Element => {
                           Delivered Parcels
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
-                          Total Amount
+                          System amount
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
+                          Manager collected
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
+                          Variance
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
                           Stats
@@ -952,6 +973,27 @@ export const AdminReconciliation = (): JSX.Element => {
                                   {formatCurrency(group.expectedAmount)}
                                 </div>
                               </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                {group.managerAmount != null ? (
+                                  <div className="text-sm font-bold text-neutral-800">{formatCurrency(group.managerAmount)}</div>
+                                ) : (
+                                  <div className="text-xs text-gray-400">Not recorded</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                {group.managerAmount != null ? (() => {
+                                  const v = Math.round((group.managerAmount - group.expectedAmount) * 100) / 100;
+                                  const withReason = group.deliveredParcels.filter((p) => p.variance && p.varianceReason).length;
+                                  return (
+                                    <>
+                                      <div className={`text-sm font-bold ${v < 0 ? "text-red-600" : v > 0 ? "text-amber-600" : "text-gray-400"}`}>
+                                        {v === 0 ? "None" : `${v > 0 ? "+" : ""}${formatCurrency(v)}`}
+                                      </div>
+                                      {withReason > 0 && <div className="text-xs text-gray-500">{withReason} with a reason</div>}
+                                    </>
+                                  );
+                                })() : <div className="text-xs text-gray-400">—</div>}
+                              </td>
                               <td className="px-4 py-4 whitespace-nowrap">
                                 <div className="flex flex-col gap-1">
                                   <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
@@ -967,7 +1009,7 @@ export const AdminReconciliation = (): JSX.Element => {
                             </tr>
                             {isExpanded && (
                               <tr>
-                                <td colSpan={4} className="px-0 py-0">
+                                <td colSpan={6} className="px-0 py-0">
                                   <div className="bg-gray-50 border-t border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -982,7 +1024,13 @@ export const AdminReconciliation = (): JSX.Element => {
                                             Location
                                           </th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">
-                                            Amount
+                                            System
+                                          </th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">
+                                            Manager
+                                          </th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">
+                                            Variance / reason
                                           </th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">
                                             Payment
@@ -1059,6 +1107,24 @@ export const AdminReconciliation = (): JSX.Element => {
                                                     parcel.parcelAmount
                                                   )}
                                                 </div>
+                                              </td>
+                                              <td className="px-4 py-3 whitespace-nowrap">
+                                                {parcel.managerAmount != null
+                                                  ? <div className="text-sm font-semibold text-neutral-800">{formatCurrency(parcel.managerAmount)}</div>
+                                                  : <div className="text-xs text-gray-400">Not recorded</div>}
+                                              </td>
+                                              <td className="px-4 py-3 min-w-[200px]">
+                                                {parcel.variance ? (
+                                                  <>
+                                                    <div className={`text-sm font-semibold ${parcel.variance < 0 ? "text-red-600" : "text-amber-600"}`}>
+                                                      {parcel.variance > 0 ? "+" : ""}{formatCurrency(parcel.variance)}
+                                                    </div>
+                                                    <div className="text-xs text-neutral-700">{parcel.varianceReason ?? "No reason given"}</div>
+                                                    {parcel.varianceNote && <div className="text-xs text-gray-500 italic">"{parcel.varianceNote}"</div>}
+                                                  </>
+                                                ) : (
+                                                  <span className="text-xs text-gray-400">{parcel.managerAmount != null ? "None" : "—"}</span>
+                                                )}
                                               </td>
                                               <td className="px-4 py-3 whitespace-nowrap">
                                                 <Badge

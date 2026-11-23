@@ -38,6 +38,10 @@ interface RiderParcelResponse {
     inboudPayed?: string;
     shelfId?: string;
     homeDelivery?: boolean;
+    // Pinned drop-off chosen at intake (docs/BACKEND_HANDOFF.md, Part A)
+    receiverLatitude?: number;
+    receiverLongitude?: number;
+    receiverLocationName?: string;
     pod?: boolean;
     delivered?: boolean;
     cancelled?: boolean;
@@ -64,6 +68,15 @@ export interface RiderAssignmentResponse {
     officeId?: string;
     payed?: boolean;
     paymentMethod?: string | null;
+    /** Route the manager confirmed when assigning (docs/BACKEND_HANDOFF.md Part F). */
+    routePlan?: {
+        method: "GOOGLE" | "ESTIMATE";
+        stopOrder: string[];
+        totalKm: number;
+        totalMinutes: number;
+        encodedPath?: string;
+        plannedAt?: number;
+    } | null;
 }
 
 interface UpdateAssignmentStatusRequest {
@@ -123,7 +136,8 @@ class RiderService {
      */
     async updateRiderStatus(status: RiderStatus): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.post<RiderStatusResponse>('/rider-status', {
+            // PUT per the backend spec (PUT /api-rider/rider-status)
+            const response = await this.apiClient.put<RiderStatusResponse>('/rider-status', {
                 riderStatus: status,
             });
             return {
@@ -192,6 +206,9 @@ class RiderService {
                     senderPhoneNumber: parcelItem.senderPhoneNumber,
                     receiverName: parcelItem.receiverName,
                     receiverAddress: parcelItem.receiverAddress,
+                    receiverLatitude: parcelItem.receiverLatitude ?? undefined,
+                    receiverLongitude: parcelItem.receiverLongitude ?? undefined,
+                    receiverLocationName: parcelItem.receiverLocationName ?? undefined,
                     recieverPhoneNumber: receiverPhone, // Map receiverPhoneNumber to recieverPhoneNumber (typo in interface)
                     shelfName: parcelItem.shelfName,
                     shelfId: parcelItem.shelfId,
@@ -233,6 +250,7 @@ class RiderService {
                             officeId: item.officeId,
                             payed: item.payed,
                             paymentMethod: item.payementMethod || item.paymentMethod,
+                            routePlan: item.routePlan ?? null,
                         } as RiderAssignmentResponse);
                     });
                 } else if (item.assignmentId && item.parcel) {
@@ -252,6 +270,7 @@ class RiderService {
                         officeId: item.officeId,
                         payed: item.payed,
                         paymentMethod: item.paymentMethod,
+                        routePlan: item.routePlan ?? null,
                     } as RiderAssignmentResponse);
                 } else {
                     // Very old format: just a parcel, need to map it

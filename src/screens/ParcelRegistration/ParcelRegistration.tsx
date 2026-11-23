@@ -387,6 +387,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { InfoSection } from "./sections/InfoSection";
 import frontdeskService from "../../services/frontdeskService";
+import type { DeliveryLocation } from "../../components/DeliveryLocationPicker";
 import authService from "../../services/authService";
 import { useToast } from "../../components/ui/toast";
 import { Package, InboxIcon } from "lucide-react";
@@ -413,6 +414,7 @@ interface ParcelFormData {
   hasCalled?: boolean;
   images?: string[];
   parcelWeight?: number;
+  deliveryLocation?: DeliveryLocation;
 }
 
 const STORAGE_KEY_PARCELS = "parcel_registration_parcels";
@@ -601,6 +603,14 @@ export const ParcelRegistration = (): JSX.Element => {
           fragile: false,
           images: parcelData.images?.length ? parcelData.images : undefined,
           parcelWeight: parcelData.parcelWeight || undefined,
+          // Pinned drop-off point (new backend fields, see docs/BACKEND_HANDOFF.md)
+          ...(parcelData.homeDelivery && parcelData.deliveryLocation ? {
+            receiverLatitude: parcelData.deliveryLocation.lat,
+            receiverLongitude: parcelData.deliveryLocation.lng,
+            receiverLocationName: parcelData.deliveryLocation.name,
+            receiverPlaceId: parcelData.deliveryLocation.placeId,
+            receiverLocationSource: parcelData.deliveryLocation.source,
+          } : {}),
         };
 
         return frontdeskService.addParcel(parcelRequest);

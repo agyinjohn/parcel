@@ -59,16 +59,49 @@ interface GoogleMapsApi {
 declare global {
   interface Window {
     google?: GoogleMapsApi;
+    /** Called by Google when the key is rejected (bad key, billing off, API not enabled, domain not allowed). */
+    gm_authFailure?: () => void;
   }
 }
 
 let loadPromise: Promise<void> | null = null;
+
+/** Shown wherever a map, place search or route optimiser is used when Google rejects the key. */
+export const MAPS_KEY_REJECTED =
+  "Google rejected the Maps API key for this site. Check that billing is on, the Maps JavaScript, Places, Geocoding and Directions APIs are enabled, and this domain is allowed on the key.";
+
+let authFailed = false;
+const authListeners = new Set<() => void>();
+
+if (typeof window !== "undefined") {
+  window.gm_authFailure = () => {
+    authFailed = true;
+    console.error(`[maps] ${MAPS_KEY_REJECTED}`);
+    authListeners.forEach((cb) => cb());
+  };
+}
+
+/**
+ * Runs `cb` if Google rejects the key. Google loads the script fine and only fails afterwards,
+ * so this is the only signal. Calls back at once if it already failed. Returns an unsubscribe.
+ */
+export function onGoogleMapsAuthFailure(cb: () => void): () => void {
+  if (authFailed) {
+    cb();
+    return () => undefined;
+  }
+  authListeners.add(cb);
+  return () => authListeners.delete(cb);
+}
+
+export const googleMapsAuthFailed = () => authFailed;
 
 export function getGoogleMapsApiKey(): string {
   return import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 }
 
 export function loadGoogleMaps(): Promise<void> {
+  if (authFailed) return Promise.reject(new Error(MAPS_KEY_REJECTED));
   if (window.google?.maps) return Promise.resolve();
   if (loadPromise) return loadPromise;
 

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { SearchIcon, FilterIcon, Download, X, Edit, Loader, Eye, Home, MoreHorizontal, ChevronDown, PrinterIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { SearchIcon, FilterIcon, Download, X, Edit, Loader, Eye, Home, MoreHorizontal, ChevronDown, PrinterIcon, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import Barcode from "react-barcode";
 import { Card, CardContent } from "../../components/ui/card";
@@ -13,6 +13,9 @@ import frontdeskService, { ParcelResponse } from "../../services/frontdeskServic
 import { useToast } from "../../components/ui/toast";
 import authService from "../../services/authService";
 import { useFrontdeskParcel } from "../../contexts/FrontdeskParcelContext";
+import {
+    DeliveryLocationPicker, type DeliveryLocation, locationFromParcel, locationToUpdate, sameLocation,
+} from "../../components/DeliveryLocationPicker";
 import { PrintLabelModal } from "../../components/PrintLabelModal";
 
 export const ParcelSearch = (): JSX.Element => {
@@ -51,6 +54,11 @@ export const ParcelSearch = (): JSX.Element => {
     const [deliveryAddress, setDeliveryAddress] = useState("");
     const [deliveryCostInput, setDeliveryCostInput] = useState("");
     const [savingDelivery, setSavingDelivery] = useState(false);
+    // Delivery pin: used by "Request Home Delivery" and the "Set/Change delivery pin" action.
+    const [deliveryPin, setDeliveryPin] = useState<DeliveryLocation | null>(null);
+    const [pinMapAvailable, setPinMapAvailable] = useState(true);
+    const [editingPin, setEditingPin] = useState(false);
+    const [savingPin, setSavingPin] = useState(false);
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [activeDelivery, setActiveDelivery] = useState<any>(null);
     const [activeDeliveryLoading, setActiveDeliveryLoading] = useState(false);
@@ -255,6 +263,10 @@ export const ParcelSearch = (): JSX.Element => {
             showToast("Please enter a delivery address", "warning");
             return;
         }
+        if (pinMapAvailable && !deliveryPin) {
+            showToast("Choose the delivery location: search a landmark or pin it on the map", "warning");
+            return;
+        }
         setSavingDelivery(true);
         try {
             const response = await frontdeskService.updateParcel(selectedParcel.parcelId, {
@@ -262,12 +274,14 @@ export const ParcelSearch = (): JSX.Element => {
                 hasCalled: true,
                 receiverAddress: deliveryAddress.trim(),
                 deliveryCost: parseFloat(deliveryCostInput) || 0,
+                ...(deliveryPin ? locationToUpdate(deliveryPin) : {}),
             });
             if (response.success) {
                 showToast("Home delivery requested successfully", "success");
                 setRequestDelivery(false);
                 setDeliveryAddress("");
                 setDeliveryCostInput("");
+                setDeliveryPin(null);
                 await refreshParcels();
                 setSelectedParcel(null);
             } else {
@@ -277,6 +291,30 @@ export const ParcelSearch = (): JSX.Element => {
             showToast("Failed to request delivery", "error");
         } finally {
             setSavingDelivery(false);
+        }
+    };
+
+    const handleSavePin = async () => {
+        if (!selectedParcel) return;
+        const before = locationFromParcel(selectedParcel);
+        if (sameLocation(before, deliveryPin)) { setEditingPin(false); return; }
+        setSavingPin(true);
+        try {
+            const update = locationToUpdate(deliveryPin);
+            const response = await frontdeskService.updateParcel(selectedParcel.parcelId, update);
+            if (response.success) {
+                showToast(deliveryPin ? "Delivery pin saved" : "Delivery pin removed", "success");
+                // Keep the details open, showing the new pin.
+                setSelectedParcel({ ...selectedParcel, ...update });
+                setEditingPin(false);
+                await refreshParcels({}, pagination.page, pagination.size);
+            } else {
+                showToast(response.message || "Failed to save the delivery pin", "error");
+            }
+        } catch {
+            showToast("Failed to save the delivery pin", "error");
+        } finally {
+            setSavingPin(false);
         }
     };
 
@@ -907,7 +945,7 @@ export const ParcelSearch = (): JSX.Element => {
             {/* Request Delivery Modal */}
             {selectedParcel && requestDelivery && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-xl">
+                    <Card className="w-full max-w-lg border border-[#d1d1d1] bg-white shadow-xl">
                         <CardContent className="p-6">
                             <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#d1d1d1]">
                                 <div>
@@ -931,6 +969,19 @@ export const ParcelSearch = (): JSX.Element => {
                                     />
                                 </div>
                                 <div>
+                                    <label className="block text-sm font-semibold text-neutral-800 mb-1.5">
+                                        Delivery Location on Map <span className="text-[#e22420]">*</span>
+                                    </label>
+                                    <DeliveryLocationPicker
+                                        value={deliveryPin}
+                                        onChange={(loc) => {
+                                            setDeliveryPin(loc);
+                                            if (loc && !deliveryAddress.trim()) setDeliveryAddress(loc.address || loc.name);
+                                        }}
+                                        onAvailabilityChange={setPinMapAvailable}
+                                    />
+                                </div>
+                                <div>
                                     <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Delivery Fee (GHC)</label>
                                     <Input
                                         type="number"
@@ -945,7 +996,7 @@ export const ParcelSearch = (): JSX.Element => {
                                     <Button onClick={() => setRequestDelivery(false)} variant="outline" className="flex-1 border-[#d1d1d1]" disabled={savingDelivery}>Cancel</Button>
                                     <Button
                                         onClick={handleRequestDelivery}
-                                        disabled={savingDelivery || !deliveryAddress.trim()}
+                                        disabled={savingDelivery || !deliveryAddress.trim() || (pinMapAvailable && !deliveryPin)}
                                         className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
                                     >
                                         {savingDelivery ? <><Loader className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Confirm Request"}
@@ -1028,6 +1079,45 @@ export const ParcelSearch = (): JSX.Element => {
                 </div>
             )}
 
+            {/* Delivery Pin Modal */}
+            {selectedParcel && editingPin && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <Card className="w-full max-w-lg border border-[#d1d1d1] bg-white shadow-xl">
+                        <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#d1d1d1]">
+                                <div>
+                                    <h3 className="text-base font-bold text-neutral-800">
+                                        {locationFromParcel(selectedParcel) ? "Change Delivery Pin" : "Add Delivery Pin"}
+                                    </h3>
+                                    <p className="text-xs text-[#5d5d5d] mt-0.5">
+                                        {selectedParcel.receiverName || selectedParcel.parcelId}
+                                        {selectedParcel.receiverAddress ? ` · ${selectedParcel.receiverAddress}` : ""}
+                                    </p>
+                                </div>
+                                <button onClick={() => setEditingPin(false)} className="text-gray-400 hover:text-neutral-800 p-1 hover:bg-gray-100 rounded" aria-label="Close">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <p className="text-xs text-[#5d5d5d] mb-3">
+                                Search a nearby landmark or pin the exact spot. Riders get directions to this point.
+                                {selectedParcel.parcelAssigned && " This parcel is already with a rider; they'll see the new pin when their list refreshes."}
+                            </p>
+                            <DeliveryLocationPicker value={deliveryPin} onChange={setDeliveryPin} />
+                            <div className="flex gap-3 pt-5">
+                                <Button onClick={() => setEditingPin(false)} variant="outline" className="flex-1 border-[#d1d1d1]" disabled={savingPin}>Cancel</Button>
+                                <Button
+                                    onClick={handleSavePin}
+                                    disabled={savingPin || sameLocation(locationFromParcel(selectedParcel), deliveryPin)}
+                                    className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
+                                >
+                                    {savingPin ? <><Loader className="w-4 h-4 animate-spin mr-2" />Saving...</> : deliveryPin ? "Save Pin" : "Remove Pin"}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             {/* Parcel Details Modal */}
             {selectedParcel && !editingShelf && (
                 <ParcelDetailModal
@@ -1045,7 +1135,8 @@ export const ParcelSearch = (): JSX.Element => {
                     }}
                     onPrint={() => setShowPrintPreview(true)}
                     onEditShelf={() => { setEditingShelf(true); setShowActionMenu(false); }}
-                    onRequestDelivery={() => { setRequestDelivery(true); setDeliveryAddress(selectedParcel.receiverAddress || ""); setDeliveryCostInput(selectedParcel.deliveryCost ? String(selectedParcel.deliveryCost) : ""); setShowActionMenu(false); }}
+                    onRequestDelivery={() => { setRequestDelivery(true); setDeliveryAddress(selectedParcel.receiverAddress || ""); setDeliveryCostInput(selectedParcel.deliveryCost ? String(selectedParcel.deliveryCost) : ""); setDeliveryPin(locationFromParcel(selectedParcel)); setShowActionMenu(false); }}
+                    onEditPin={() => { setDeliveryPin(locationFromParcel(selectedParcel)); setEditingPin(true); setShowActionMenu(false); }}
                     onCancelDelivery={async () => { setShowActionMenu(false); const res = await frontdeskService.updateParcel(selectedParcel.parcelId, { homeDelivery: false, deliveryCost: 0, receiverAddress: "" }); if (res.success) { showToast("Home delivery cancelled", "success"); await refreshParcels(); setSelectedParcel(null); } else showToast(res.message || "Failed", "error"); }}
                     onSaved={async () => { await refreshParcels(); }}
                     showActionMenu={showActionMenu}
@@ -1082,6 +1173,7 @@ interface ParcelDetailModalProps {
     onEditShelf: () => void;
     onRequestDelivery: () => void;
     onCancelDelivery: () => void;
+    onEditPin: () => void;
     onSaved: () => void;
     showActionMenu: boolean;
     onToggleActionMenu: () => void;
@@ -1090,12 +1182,13 @@ interface ParcelDetailModalProps {
 
 const ParcelDetailModal: React.FC<ParcelDetailModalProps> = ({
     parcel, activeDelivery, activeDeliveryLoading, onClose, onMarkPickup, onPrint, onEditShelf,
-    onRequestDelivery, onCancelDelivery, onSaved,
+    onRequestDelivery, onCancelDelivery, onEditPin, onSaved,
     showActionMenu, onToggleActionMenu, actionMenuRef,
 }) => {
     const { showToast } = useToast();
     const { userRole } = useStation();
     const { shelves } = useShelf();
+    const pin = locationFromParcel(parcel);
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -1270,6 +1363,34 @@ const ParcelDetailModal: React.FC<ParcelDetailModalProps> = ({
                                     <Field label="Name" value={parcel.receiverName} />
                                     <Field label="Phone" value={parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : undefined} />
                                     {parcel.receiverAddress && <Field label="Address" value={parcel.receiverAddress} span />}
+                                    {parcel.homeDelivery && (
+                                        <div className="col-span-2">
+                                            <p className="text-[11px] text-neutral-400 mb-0.5">Delivery pin</p>
+                                            {pin ? (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <MapPin className="w-3.5 h-3.5 text-[#ea690c] shrink-0" />
+                                                    <span className="text-sm text-neutral-800">{pin.name}</span>
+                                                    <a
+                                                        href={`https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.lng}`}
+                                                        target="_blank" rel="noreferrer"
+                                                        className="text-xs text-neutral-500 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-800"
+                                                    >
+                                                        View on map
+                                                    </a>
+                                                    {!parcel.delivered && (
+                                                        <button onClick={onEditPin} className="text-xs font-medium text-[#ea690c] hover:underline">Change</button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-sm text-amber-700">No pin yet; riders get directions from the address text</span>
+                                                    {!parcel.delivered && (
+                                                        <button onClick={onEditPin} className="text-xs font-medium text-[#ea690c] hover:underline">Add pin</button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1459,6 +1580,11 @@ const ParcelDetailModal: React.FC<ParcelDetailModalProps> = ({
                                             {!parcel.delivered && !parcel.parcelAssigned && !parcel.homeDelivery && (
                                                 <button onClick={onRequestDelivery} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-neutral-700 hover:bg-neutral-50 text-left">
                                                     <Home className="w-3.5 h-3.5 text-neutral-400" /> Request Home Delivery
+                                                </button>
+                                            )}
+                                            {parcel.homeDelivery && !parcel.delivered && (
+                                                <button onClick={onEditPin} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-neutral-700 hover:bg-neutral-50 text-left">
+                                                    <MapPin className="w-3.5 h-3.5 text-neutral-400" /> {pin ? "Change Delivery Pin" : "Set Delivery Pin"}
                                                 </button>
                                             )}
                                             {parcel.homeDelivery && !parcel.delivered && !parcel.parcelAssigned && (

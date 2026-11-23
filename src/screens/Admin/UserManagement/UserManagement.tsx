@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Phone, Mail, Building2, X, Loader, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Phone, Mail, Building2, X, Loader, Trash2, AlertTriangle, Satellite } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -10,8 +10,10 @@ import { useLocation } from "../../../contexts/LocationContext";
 import { useUser } from "../../../contexts/UserContext";
 import { useToast } from "../../../components/ui/toast";
 import userService, { AdminCreatableRole, DepartmentRole, fromBackendRole, roleRequiresOffice } from "../../../services/userService";
+import adminService from "../../../services/adminService";
 
 const roleColors: Record<string, string> = {
+    SUPER_ADMIN: "bg-gray-900 text-white",
     ADMIN: "bg-red-100 text-red-800",
     MANAGER: "bg-blue-100 text-blue-800",
     FRONTDESK: "bg-green-100 text-green-800",
@@ -54,6 +56,36 @@ export const UserManagement = (): JSX.Element => {
     const [userToAddToStation, setUserToAddToStation] = useState<{ userId: string; name: string; phoneNumber?: string } | null>(null);
     const [selectedOfficeForAdd, setSelectedOfficeForAdd] = useState<string>("");
     const [isAddingToStation, setIsAddingToStation] = useState(false);
+
+    // Assign GPS device (riders only) - PUT /api-admin/riders/device
+    const [deviceTarget, setDeviceTarget] = useState<{ name: string; phoneNumber: string; currentImei?: string } | null>(null);
+    const [deviceImeiInput, setDeviceImeiInput] = useState("");
+    const [isAssigningDevice, setIsAssigningDevice] = useState(false);
+    const imeiValid = /^\d{14,17}$/.test(deviceImeiInput);
+
+    const handleInitiateAssignDevice = (user: { name: string; phoneNumber: string; deviceImei?: string }) => {
+        setDeviceTarget({ name: user.name, phoneNumber: user.phoneNumber, currentImei: user.deviceImei });
+        setDeviceImeiInput(user.deviceImei ?? "");
+    };
+
+    const closeAssignDevice = () => {
+        setDeviceTarget(null);
+        setDeviceImeiInput("");
+    };
+
+    const handleConfirmAssignDevice = async () => {
+        if (!deviceTarget || !imeiValid) return;
+        setIsAssigningDevice(true);
+        const res = await adminService.assignRiderDevice(deviceTarget.phoneNumber, deviceImeiInput);
+        setIsAssigningDevice(false);
+        if (res.success) {
+            showToast(`GPS device ${deviceTarget.currentImei ? "updated" : "assigned"} for ${deviceTarget.name}`, "success");
+            closeAssignDevice();
+            await refreshUsers(pagination.page, pagination.size);
+        } else {
+            showToast(res.message || "Failed to assign the GPS device.", "error");
+        }
+    };
 
     // Helper function to get office name from officeId
     const getOfficeName = (user: any): string => {
@@ -525,6 +557,7 @@ export const UserManagement = (): JSX.Element => {
                                         className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     >
                                         <option value="">All Roles</option>
+                                        <option value="SUPER_ADMIN">Super Admin</option>
                                         <option value="ADMIN">Admin</option>
                                         <option value="MANAGER">Manager</option>
                                         <option value="FRONTDESK">Front Desk</option>
@@ -663,6 +696,12 @@ export const UserManagement = (): JSX.Element => {
                                                             >
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
                                                                     <span className="text-xs sm:text-sm font-medium text-neutral-800">{user.name}</span>
+                                                                    {fromBackendRole(user.role) === "RIDER" && (
+                                                                        <span className={`mt-0.5 flex items-center gap-1 text-[11px] ${user.deviceImei ? "text-neutral-500" : "text-[#9a9a9a]"}`}>
+                                                                            <Satellite size={11} className="flex-shrink-0" />
+                                                                            {user.deviceImei ? `GPS ···${user.deviceImei.slice(-4)}` : "No GPS device"}
+                                                                        </span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6">
                                                                     <div className="flex flex-col gap-1.5">
@@ -680,7 +719,7 @@ export const UserManagement = (): JSX.Element => {
                                                                 </td>
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
                                                                     <Badge className={roleColors[fromBackendRole(user.role)] || roleColors[user.role] || "bg-gray-100 text-gray-800"}>
-                                                                        <span className="text-xs">{fromBackendRole(user.role).replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                                        <span className="text-xs">{fromBackendRole(user.role).replace(/_/g, "").replace(/([A-Z])/g, ' $1').trim()}</span>
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
@@ -704,6 +743,16 @@ export const UserManagement = (): JSX.Element => {
                                                                     >
                                                                         <Trash2 size={16} />
                                                                     </button>
+                                                                    {fromBackendRole(user.role) === "RIDER" && user.phoneNumber && (
+                                                                        <button
+                                                                            onClick={() => handleInitiateAssignDevice({ name: user.name, phoneNumber: user.phoneNumber, deviceImei: user.deviceImei })}
+                                                                            className="text-neutral-600 hover:bg-gray-100 p-2 rounded transition-colors mr-2"
+                                                                            title={user.deviceImei ? "Change GPS device" : "Assign GPS device"}
+                                                                            aria-label={user.deviceImei ? "Change GPS device" : "Assign GPS device"}
+                                                                        >
+                                                                            <Satellite size={16} />
+                                                                        </button>
+                                                                    )}
                                                                     {(fromBackendRole(user.role) === "RIDER" || !getUserOfficeId(user)) && (
                                                                         <button
                                                                             onClick={() => handleInitiateAddToStation({ userId: user.userId, name: user.name, phoneNumber: user.phoneNumber })}
@@ -756,6 +805,62 @@ export const UserManagement = (): JSX.Element => {
             </div>
 
             {/* NEW: Add to Station Modal */}
+            {deviceTarget && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md rounded-lg border border-[#d1d1d1] bg-white shadow-lg">
+                        <CardContent className="p-6">
+                            <h2 className="text-lg font-bold text-neutral-800 mb-2">
+                                {deviceTarget.currentImei ? "Change GPS Device" : "Assign GPS Device"}
+                            </h2>
+                            <p className="text-sm text-neutral-700 mb-4">
+                                Link a GPS tracker to <span className="font-semibold">{deviceTarget.name}</span> ({formatPhoneNumber(deviceTarget.phoneNumber)}) so they appear on the Rider Map.
+                            </p>
+
+                            {deviceTarget.currentImei && (
+                                <p className="text-xs text-neutral-500 mb-3">
+                                    Current device: <span className="font-mono">{deviceTarget.currentImei}</span>
+                                </p>
+                            )}
+
+                            <Label htmlFor="device-imei" className="block text-sm font-semibold text-neutral-800 mb-2">Device IMEI</Label>
+                            <Input
+                                id="device-imei"
+                                inputMode="numeric"
+                                autoFocus
+                                value={deviceImeiInput}
+                                onChange={(e) => setDeviceImeiInput(e.target.value.replace(/\D/g, "").slice(0, 17))}
+                                onKeyDown={(e) => { if (e.key === "Enter" && imeiValid && !isAssigningDevice) handleConfirmAssignDevice(); }}
+                                placeholder="e.g. 358810000012345"
+                                className="w-full font-mono tracking-wide"
+                            />
+                            <p className={`text-xs mt-2 ${deviceImeiInput && !imeiValid ? "text-red-600" : "text-[#9a9a9a]"}`}>
+                                {deviceImeiInput && !imeiValid
+                                    ? "Enter the full IMEI (usually 15 digits)."
+                                    : "Printed on the tracker or its box, usually 15 digits."}
+                            </p>
+
+                            <div className="flex gap-3 mt-6">
+                                <Button
+                                    onClick={closeAssignDevice}
+                                    variant="outline"
+                                    className="flex-1 border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
+                                    disabled={isAssigningDevice}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleConfirmAssignDevice}
+                                    className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
+                                    disabled={isAssigningDevice || !imeiValid || deviceImeiInput === deviceTarget.currentImei}
+                                >
+                                    {isAssigningDevice ? "Saving..." : deviceTarget.currentImei ? "Change Device" : "Assign Device"}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             {showAddToStationModal && userToAddToStation && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <Card className="w-full max-w-md rounded-lg border border-[#d1d1d1] bg-white shadow-lg">

@@ -18,4 +18,11 @@ export const API_ENDPOINTS = {
     COMPANY: `${API_BASE_URL}/api-company`,
 };
 
+/**
+ * Backend contract version. "2" is the updated backend (backend-test, Nov 2026): reconciliation sent
+ * as { items: [...] } with numbers, users created with a single officeId, bulk rider locations and
+ * server-side delivery checks. Leave unset for the current production backend (backend-new).
+ */
+export const API_V2 = import.meta.env.VITE_API_VERSION === "2";
+
 export default API_BASE_URL;
