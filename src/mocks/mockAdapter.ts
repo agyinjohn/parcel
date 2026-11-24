@@ -207,10 +207,57 @@ on("delete", /^\/api-frontdesk\/parcel\/([^/]+)$/, ({ match }) => {
     if (i >= 0) PARCELS.splice(i, 1);
     return ok("Parcel deleted");
 });
+// Counter pickups with payment (proposed, handoff Part L). Seeded with a few from earlier today.
+const localDay = (t: number) => {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const COUNTER_COLLECTIONS: any[] = (() => {
+    const start = new Date(); start.setHours(9, 10, 0, 0);
+    const methods = ["CASH", "MOMO", "CASH", "CASH", "MOMO"];
+    return PARCELS.filter((p) => p.officeId === HOME_OFFICE.id && !p.pickedUp && !p.parcelAssigned && !p.homeDelivery).slice(0, 5).map((p, i) => {
+        const due = (p.inboundCost || 0) + (p.storageCost || 0) + (p.pickUpCost || 0) + (p.pod ? p.itemCost || 0 : 0);
+        const paid = i === 3 ? Math.max(0, due - 5) : due;
+        Object.assign(p, { pickedUp: true, delivered: true });
+        return {
+            parcelId: p.parcelId, receiverName: p.receiverName, collectedByName: p.receiverName, collectedByPhone: p.recieverPhoneNumber,
+            pickedUpAt: Math.min(Date.now() - 5 * 60_000, start.getTime() + i * 47 * 60_000),
+            amountDue: due, amountPaid: paid, varianceAmount: paid - due, paymentMethod: methods[i],
+            momoReference: methods[i] === "MOMO" ? `44718${25930 + i}` : undefined,
+            varianceReason: paid !== due ? "Customer paid less" : undefined, varianceNote: paid !== due ? "Will bring the rest tomorrow" : undefined,
+            recordedByName: "Akosua Boateng",
+        };
+    });
+})();
+const CASH_UPS: Record<string, any> = {};
+
 on("post", /^\/api-frontdesk\/parcel\/picked-up$/, ({ body }) => {
     const p = findParcel(body?.parcelId);
     if (p) Object.assign(p, { pickedUp: true, delivered: true, updatedAt: Date.now() });
+    if (p && body?.amountDue !== undefined) {
+        COUNTER_COLLECTIONS.push({
+            parcelId: p.parcelId, receiverName: p.receiverName,
+            collectedByName: body.whoPickedUpName, collectedByPhone: body.whoPickedUpTelephoneNumber, pickedUpAt: Date.now(),
+            amountDue: Number(body.amountDue) || 0, amountPaid: Number(body.amountPaid) || 0, varianceAmount: Number(body.varianceAmount) || 0,
+            paymentMethod: body.paymentMethod, momoReference: body.momoReference, varianceReason: body.varianceReason, varianceNote: body.varianceNote,
+            recordedByName: "Kofi Mensah",
+        });
+    }
     return ok("Parcel marked as picked up");
+});
+on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
+    const day = params.get("date") ?? localDay(Date.now());
+    return COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
+});
+on("get", /^\/api-frontdesk\/counter-cashup$/, ({ params }) => {
+    const rec = CASH_UPS[params.get("date") ?? ""];
+    if (!rec) throw { status: 404, message: "Not closed" };
+    return rec;
+});
+on("post", /^\/api-frontdesk\/counter-cashup$/, ({ body }) => {
+    if (CASH_UPS[body?.date]) throw { status: 409, message: "This day is already closed" };
+    CASH_UPS[body.date] = { ...body, closedAt: Date.now(), closedByName: "Kofi Mensah" };
+    return ok("Cash-up saved");
 });
 on("post", /^\/api-frontdesk\/assign-parcels$/, ({ body }) => {
     const ids: string[] = body?.parcelIds ?? [];

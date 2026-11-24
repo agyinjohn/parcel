@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, SearchIcon, Layers, Edit, LogOut, ZapIcon, CarIcon, ArrowDownToLine, ArrowUpFromLine, Settings, HelpCircle, Building2 } from "lucide-react";
+import { X, InboxIcon, SearchIcon, Layers, Edit, LogOut, ZapIcon, CarIcon, ArrowDownToLine, ArrowUpFromLine, Settings, HelpCircle, Building2, Wallet } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
 
@@ -18,6 +18,7 @@ const navItems = [
     { label: "Shelf", path: "/parcel/shelf", icon: Layers, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Smart Search", path: "/parcel/smart-search", icon: ZapIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Edit Parcels",  path: "/parcel/edit",         icon: Edit,        roles: ["MANAGER"] },
+    { label: "Counter Cash-up", path: "/parcel/cash-up", icon: Wallet, roles: ["MANAGER"] },
     { label: "Branch Settings", path: "/parcel/branch-settings", icon: Building2, roles: ["MANAGER"] },
     { label: "Settings",      path: "/parcel/settings",     icon: Settings,    roles: ["FRONTDESK", "MANAGER"] },
     { label: "Help",          path: "/parcel/help",         icon: HelpCircle,  roles: ["FRONTDESK", "MANAGER"] },

@@ -1,6 +1,19 @@
 import axios, { AxiosInstance } from 'axios';
 import authService from './authService';
 import { API_ENDPOINTS, API_V2 } from '../config/api';
+import type { CounterCollection, CounterPayment } from '../utils/counterPickup';
+
+/** A closed counter cash-up (proposed, handoff Part L). */
+export interface CashUpRecord {
+    date: string;
+    expectedCash: number;
+    countedCash: number;
+    expectedMomo: number;
+    varianceAmount: number;
+    note?: string;
+    closedAt?: number;
+    closedByName?: string;
+}
 
 const API_BASE_URL_FRONTDESK = API_ENDPOINTS.FRONTDESK;
 
@@ -1035,11 +1048,21 @@ class FrontdeskService {
      * Mark a parcel as picked up
      * POST /api-frontdesk/parcel/picked-up
      */
-    async markParcelPickedUp(parcelId: string, whoPickedUpName?: string, whoPickedUpTelephoneNumber?: string): Promise<ApiResponse> {
+    /**
+     * POST /parcel/picked-up. `payment` (what the customer paid at the counter) is a proposed
+     * addition to PickedUpRequest, handoff Part L; older backends ignore it.
+     */
+    async markParcelPickedUp(
+        parcelId: string,
+        whoPickedUpName?: string,
+        whoPickedUpTelephoneNumber?: string,
+        payment?: CounterPayment,
+    ): Promise<ApiResponse> {
         try {
-            const body: { parcelId: string; whoPickedUpName?: string; whoPickedUpTelephoneNumber?: string } = { parcelId };
+            const body: Record<string, unknown> = { parcelId };
             if (whoPickedUpName) body.whoPickedUpName = whoPickedUpName;
             if (whoPickedUpTelephoneNumber) body.whoPickedUpTelephoneNumber = whoPickedUpTelephoneNumber;
+            if (payment) Object.assign(body, payment);
             const response = await this.apiClient.post('/parcel/picked-up', body);
             return { success: true, message: 'Parcel marked as picked up', data: response.data };
         } catch (error: any) {
@@ -1047,6 +1070,37 @@ class FrontdeskService {
         }
     }
 
+
+    /** Counter pickups and payments for one day at the caller's station (proposed, handoff Part L). */
+    async getCounterCollections(date: string): Promise<ApiResponse & { data?: CounterCollection[] }> {
+        try {
+            const response = await this.apiClient.get<CounterCollection[]>(`/counter-collections?date=${encodeURIComponent(date)}`);
+            return { success: true, message: 'OK', data: Array.isArray(response.data) ? response.data : [] };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load counter collections.' };
+        }
+    }
+
+    /** Close the day's counter cash-up (proposed, handoff Part L). */
+    async submitCashUp(body: { date: string; expectedCash: number; countedCash: number; expectedMomo: number; varianceAmount: number; note?: string }): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post('/counter-cashup', body);
+            return { success: true, message: response.data?.message || 'Cash-up saved', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to save the cash-up.' };
+        }
+    }
+
+    /** The saved cash-up for a day, if any (proposed, handoff Part L). */
+    async getCashUp(date: string): Promise<ApiResponse & { data?: CashUpRecord | null }> {
+        try {
+            const response = await this.apiClient.get<CashUpRecord>(`/counter-cashup?date=${encodeURIComponent(date)}`);
+            return { success: true, message: 'OK', data: response.data ?? null };
+        } catch (error: any) {
+            if (error.response?.status === 404) return { success: true, message: 'Not closed yet', data: null };
+            return { success: false, message: error.response?.data?.message || 'Failed to load the cash-up.' };
+        }
+    }
 
     /**
      * Get addresses stored for the current office.

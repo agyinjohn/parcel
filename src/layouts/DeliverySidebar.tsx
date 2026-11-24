@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Map as MapIcon, Edit, Building2 } from "lucide-react";
+import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Map as MapIcon, Edit, Building2, Wallet } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
 
@@ -20,6 +20,7 @@ const navItems = [
     { label: "Home Delivery", path: "/delivery/call-center/home-delivery", icon: HomeIcon, roles: ["CALLER"] },
     { label: "Post-Delivery", path: "/delivery/call-center/follow-up", icon: CheckCircleIcon, roles: ["CALLER"] },
     { label: "Reconciliation", path: "/delivery/reconciliation", icon: DollarSignIcon, roles: ["MANAGER"] },
+    { label: "Counter Cash-up", path: "/delivery/cash-up", icon: Wallet, roles: ["MANAGER"] },
     { label: "Analytics", path: "/delivery/analytics", icon: BarChart2, roles: ["MANAGER"] },
     { label: "Smart Search", path: "/delivery/smart-search", icon: ZapIcon, roles: ["MANAGER", "CALLER"] },
     { label: "Edit Parcels", path: "/delivery/edit", icon: Edit, roles: ["MANAGER"] },
