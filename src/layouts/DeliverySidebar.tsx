@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Map as MapIcon, Edit } from "lucide-react";
+import { X, ClipboardListIcon, TruckIcon, DollarSignIcon, PhoneIcon, HomeIcon, CheckCircleIcon, BarChart2, LogOut, ZapIcon, SearchIcon, Package, MapPin, Map as MapIcon, Edit, Building2 } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
 
@@ -24,6 +24,7 @@ const navItems = [
     { label: "Smart Search", path: "/delivery/smart-search", icon: ZapIcon, roles: ["MANAGER", "CALLER"] },
     { label: "Edit Parcels", path: "/delivery/edit", icon: Edit, roles: ["MANAGER"] },
     { label: "Addresses", path: "/delivery/addresses", icon: MapPin, roles: ["FRONTDESK", "MANAGER"] },
+    { label: "Branch Settings", path: "/delivery/branch-settings", icon: Building2, roles: ["MANAGER"] },
 ];
 
 export const DeliverySidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {

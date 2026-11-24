@@ -25,6 +25,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/parcel/driver-tracker": { title: "Driver Tracker", description: "Track inbound driver reconciliation" },
     "/parcel/assignments": { title: "Package Assignments", description: "Select parcels to assign to riders" },
     "/parcel/settings": { title: "Settings", description: "Manage branch configuration and account preferences" },
+    "/parcel/branch-settings": { title: "Branch Settings", description: "Branding, branch details, printing and station charges" },
     "/parcel/preferences": { title: "Settings", description: "Manage branch configuration and account preferences" },
     "/parcel/help": { title: "Help & Support", description: "Get help and support for using the system" },
     // Delivery Hub
@@ -46,6 +47,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/delivery/addresses": { title: "Saved Addresses", description: "Delivery address presets with cost for this office" },
     "/delivery/smart-search": { title: "Smart Search", description: "Search parcels by customer phone number" },
     "/delivery/settings": { title: "Settings", description: "Manage branch configuration and account preferences" },
+    "/delivery/branch-settings": { title: "Branch Settings", description: "Branding, branch details, printing and station charges" },
     "/delivery/preferences": { title: "Settings", description: "Manage branch configuration and account preferences" },
     "/delivery/help": { title: "Help & Support", description: "Get help and support for using the system" },
     // Admin Shell

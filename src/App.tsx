@@ -52,6 +52,7 @@ import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialRepo
 import { AdminReconciliation } from "./screens/Admin/AdminReconciliation/AdminReconciliation";
 import { AdminReconciliationAnalytics } from "./screens/Admin/AdminReconciliationAnalytics/AdminReconciliationAnalytics";
 import { Settings } from "./screens/Settings/Settings";
+import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { Help } from "./screens/Help/Help";
 import { TenantSettings } from "./screens/Admin/TenantSettings/TenantSettings";
 import { Billing } from "./screens/Admin/Billing/Billing";
@@ -137,6 +138,7 @@ export const App = (): JSX.Element => {
                               <Route path="/parcel/assignments" element={<ProtectedRoute allowedRoles={["MANAGER"]}><ParcelLayout><ParcelSelection /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/settings" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><Settings /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/preferences" element={<Navigate to="/parcel/settings" replace />} />
+                              <Route path="/parcel/branch-settings" element={<ProtectedRoute allowedRoles={["MANAGER"]}><ParcelLayout><BranchSettings /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/help" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><Help /></ParcelLayout></ProtectedRoute>} />
 
                               {/* Parcel flow sub-pages (layout-less, keep MainLayout for now) */}
@@ -169,6 +171,7 @@ export const App = (): JSX.Element => {
                               <Route path="/delivery/edit" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelEdit /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/settings" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><Settings /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/preferences" element={<Navigate to="/delivery/settings" replace />} />
+                              <Route path="/delivery/branch-settings" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><BranchSettings /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/help" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><Help /></DeliveryLayout></ProtectedRoute>} />
 
                               {/* ════════════════════════════════

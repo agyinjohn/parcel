@@ -60,6 +60,10 @@ export const BranchSettings = (): JSX.Element => {
     const { showToast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [activeTab, setActiveTab] = useState<TabId>("identity");
+    // Only managers (and admins) can set the station's charges; the backend refuses anyone else.
+    const { userRole } = useStation();
+    const canSetCharges = userRole === "MANAGER" || userRole === "ADMIN";
+    const tabs = TABS.filter((t) => t.id !== "charges" || canSetCharges);
     const [dragActive, setDragActive] = useState(false);
 
     const [form, setForm] = useState({
@@ -186,7 +190,7 @@ export const BranchSettings = (): JSX.Element => {
 
                 {/* ── Tabs ── */}
                 <div className="mb-6 flex w-full border-b border-[#e3e3e3]">
-                    {TABS.map(({ id, label, icon: Icon }) => (
+                    {tabs.map(({ id, label, icon: Icon }) => (
                         <button
                             key={id}
                             type="button"
@@ -207,7 +211,7 @@ export const BranchSettings = (): JSX.Element => {
                 {/* ── Panel ── */}
                 <div className="rounded-2xl border border-[#e3e3e3] bg-white p-5 shadow-sm sm:p-7">
 
-                    {activeTab === "charges" && <ChargesPanel />}
+                    {activeTab === "charges" && canSetCharges && <ChargesPanel />}
 
                     {/* ═══ Visual Identity ═══ */}
                     {activeTab === "identity" && (
