@@ -2,11 +2,14 @@
 
 This is the short list for the backend, as of 27 Nov 2026. It was checked against `https://backend-test.mandmservicescorp.org/shortly/v3/api-docs`. Everything else from the full handoff doc (`docs/BACKEND_HANDOFF.md`) is already in place on `backend-test`: delivery pins, rider locations and delivery check, route plans, the pickup charge, reconciliation lines, and station or location delete.
 
+"Part J/K/L" references point to the full handoff doc; section 2 here is its Part L.
+
 Work in this order:
 1. **Fix three things on `backend-test`**, which the frontend relies on.
 2. **Counter pickup payments and cash-up.** The frontend is built and waiting.
-3. **Release `backend-test` to production** (`backend-new`).
-4. **Next features:** notifications, settings, fuel, motorbikes. These are planned; the frontend will follow.
+3. **Driver payments, the new design.** The frontend will be rebuilt on these endpoints.
+4. **Release `backend-test` to production** (`backend-new`).
+5. **Next features:** notifications, settings, fuel, motorbikes. These are planned; the frontend will follow.
 
 ---
 
@@ -123,7 +126,161 @@ GET /api-frontdesk/counter-cashup?date=2026-11-24
 
 ---
 
-## 3. Release to production
+## 3. Driver payments (new design)
+
+### Today
+
+The **Driver Tracker** shows what the station owes the drivers who bring parcels in. A driver's fee for a parcel is its inbound cost.
+
+- `GET /api-frontdesk/driver-assignments/unpaid` returns one `DriverAssignment` per parcel. The frontend loads **up to 10,000** of them and groups them in the browser, by driver phone number and by the minute they were registered (as a stand-in for a trip).
+- `PUT /api-frontdesk/driver-assignments/pay` takes a list of IDs and only sets `payed = true`.
+
+That leaves several gaps:
+- **No payment record.** There's no amount actually paid, no cash or MoMo method, no MoMo reference and no receipt.
+- **Hard to change a payment.** There's no way to deduct for a damaged parcel, recover an advance, or reverse a payment.
+- **No driver record.** Drivers are free text typed at intake, so the same driver shows up under several spellings.
+- **No real trips.** There's no record of what a driver declared they brought against what was received.
+- **No balances.** There's no history or balance per driver, and cash paid to drivers isn't taken out of the counter cash-up (Part L).
+- **Slow loading.** The screen is slow, and it's incomplete for stations with more than 10,000 open fees.
+
+### The new design
+
+![Driver statement: balances, trips with fee lines, pay bar](images/driver-payments-1-statement.png)
+
+![Payout: deductions, cash or MoMo, driver confirms by SMS code, receipt](images/driver-payments-2-payout.png)
+
+![How driver money moves: entities and fee line states](images/driver-payments-3-flow.png)
+
+The page is called **Driver Payments**, with four tabs:
+- **To pay:** the driver list with balances. Selecting a driver shows their statement: trips, each trip's parcels with a status, and a pay bar.
+- **Trips**
+- **Payout history**
+- **Drivers**
+
+Paying opens a **payout** window:
+- ready fees, minus deductions or plus bonuses;
+- cash or mobile money (to the driver's saved MoMo number, with the transaction ID);
+- the driver confirms receipt with an SMS code;
+- a receipt is printed.
+
+### 3.1 Driver records (required)
+
+**Model:** `Driver` {id, officeId(s), name, phoneNumbers[], momoNumber, momoNetwork (MTN, TELECEL, AIRTELTIGO), vehicles[], company, status (ACTIVE, BLOCKED), createdAt}.
+
+**Endpoints:**
+- `GET /api-frontdesk/drivers?search=` searches by name, phone or vehicle, and returns a page.
+- `POST /api-frontdesk/drivers`
+- `PUT /api-frontdesk/drivers/{id}`
+
+**At intake:** `ParcelRequest` gets an optional `driverId`. Keep accepting `driverName`, `driverPhoneNumber` and `vehicleNumber`. When `driverId` is missing, find the driver by normalised phone number, or create one. **Migration:** create drivers from existing `DriverAssignment` phone numbers, and link the old assignments to them.
+
+### 3.2 Trips (required)
+
+**Model:** `Trip` {id, driverId, vehicleNumber, origin, arrivedAt, receivedById, declaredCount, receivedCount, note}.
+
+**Endpoints:**
+- `POST /api-frontdesk/driver-trips` {driverId, vehicleNumber, origin, declaredCount} returns a `tripId`. The intake screen calls it when a driver arrives.
+- `ParcelRequest` gets an optional `tripId`. When it's missing, attach the parcel to the driver's open trip for the same vehicle and day, or open one.
+- `GET /api-frontdesk/driver-trips?driverId=&from=&to=` lists trips with counts and fee totals. When `receivedCount ≠ declaredCount`, flag the trip.
+
+### 3.3 Fee line state (required)
+
+Extend `DriverAssignment`, our "driver fee line", with these fields:
+
+| Field | Notes |
+|---|---|
+| `driverId`, `tripId` | Links to the records in M1 and M2. |
+| `state` | `WAITING`, then `READY`, then `PAID`; or `ON_HOLD` (disputed, damaged), or `NOT_PAYABLE` (parcel returned or cancelled). Replaces the `payed` flag; keep `payed = (state == PAID)` for old clients. |
+| `readyAt` | When it became payable. |
+| `holdReason`, `heldBy`, `heldAt` | Set while the line is `ON_HOLD`. |
+| `payoutId` | Set when the line is paid. |
+
+**When a line becomes `READY`:**
+- **Default** (station setting `driverPayPolicy = ON_COLLECTION`): when the customer has paid. That's a counter pickup with payment (Part L), or a home delivery whose rider assignment has been reconciled (Part K).
+- **`ON_ARRIVAL`:** straight away, at intake.
+- **Returned parcels** become `NOT_PAYABLE`.
+
+Add `driverPayPolicy` to the station settings (Part J endpoints).
+
+### 3.4 Balances and statements, from the server (required)
+
+These replace loading every unpaid assignment into the browser.
+
+- `GET /api-frontdesk/driver-balances?search=&state=READY|ALL|ON_HOLD&page=&size=` returns one row per driver: {driverId, name, phone, vehicles[], readyAmount, waitingAmount, onHoldAmount, paidLast30Days, lastTripAt, readyCount}. Sort by `readyAmount` descending.
+- `GET /api-frontdesk/drivers/{id}/statement?from=&to=` returns:
+  - the driver;
+  - the balances;
+  - trips (newest first), each with its fee lines {id, parcelId, receiverName, amount, state, readyAt, holdReason, readyReason: "PICKED_UP 11:05" or "DELIVERED 12:40", shelfName};
+  - payouts;
+  - open adjustments.
+- `GET /api-frontdesk/driver-payments/summary` returns the four figures across the top: ready, waiting, paid this week (count and MoMo share), and on hold.
+
+### 3.5 Payouts (required)
+
+```
+POST /api-frontdesk/driver-payouts
+{
+  "driverId": "drv-118",
+  "lineIds": ["da-1", "da-2", "..."],
+  "adjustments": [
+    { "type": "DEDUCTION", "amount": 25, "reason": "Damaged item", "parcelId": "PF247701" },
+    { "type": "ADVANCE_REPAID", "amount": 50, "reason": "Fuel advance 20 Nov", "adjustmentId": "adj-9" }
+  ],
+  "paymentMethod": "MOMO",
+  "momoNumber": "0244118902",
+  "momoReference": "7712049935",
+  "note": ""
+}
+→ 200 { "payoutId": "po-431", "receiptNo": "DP-00431", "grossAmount": 465, "netAmount": 390, "confirmationRequired": true }
+```
+
+**Model:** `Payout` {id, receiptNo (per station, sequential), driverId, officeId, lineIds[], adjustments[], grossAmount, netAmount, paymentMethod, momoNumber, momoReference, paidById, paidByName, paidAt, confirmed, confirmedAt, reversed, reversedReason}.
+
+**Validation and saving:**
+- **Lines:** every line must be `READY` and belong to the driver.
+- **Amounts:** `netAmount` = gross − deductions + bonuses, and must not be negative.
+- **MoMo:** needs `momoReference`.
+- **One transaction:** save in a single transaction. Lines become `PAID` with `payoutId` set.
+- **Access:** managers only (or a station permission).
+
+**Driver confirmation:**
+- `POST /driver-payouts/{id}/send-code` texts a 4-digit code to the driver.
+- `PUT /driver-payouts/{id}/confirm` {code} sets `confirmed`.
+
+Payouts that aren't confirmed still count as paid, but are listed for follow-up.
+
+**Reading and reversing:**
+- `GET /api-frontdesk/driver-payouts?driverId=&from=&to=` lists payouts.
+- `GET /api-frontdesk/driver-payouts/{id}` returns the full receipt.
+- `POST /api-frontdesk/driver-payouts/{id}/reverse` {reason} is manager only. The lines go back to `READY`, and the reversal is kept in the history.
+
+### 3.6 Holds and adjustments (required)
+
+**Holds:**
+- `PUT /api-frontdesk/driver-fee-lines/{id}/hold` {reason}
+- `PUT /api-frontdesk/driver-fee-lines/{id}/release`
+
+**Adjustments:**
+- `POST /api-frontdesk/drivers/{id}/adjustments` {type: ADVANCE | DEDUCTION | BONUS, amount, reason, parcelId?} records an advance given (cash out) or a deduction or bonus to apply at the next payout.
+- `GET /api-frontdesk/drivers/{id}/adjustments?open=true` lists the open ones.
+
+### 3.7 Link to the counter cash-up (required)
+
+Cash payouts and cash advances to drivers come out of the counter drawer. Include them in Part L:
+- **The day's list:** `GET /counter-collections` (or a new `GET /counter-cash-movements`) returns driver cash payouts and advances for the day.
+- **Expected cash:** `expectedCash` = counter cash taken − driver cash paid out − driver cash advances.
+
+### 3.8 Reports (recommended)
+
+- `GET /api-admin/driver-payouts/summary?officeId=&from=&to=` returns payouts per station and per driver: gross, deductions, net, cash against MoMo, and unconfirmed payouts.
+- **Trips with missing parcels:** received count lower than declared.
+- **Long-waiting fees:** fees that have been `READY` for more than N days without payment.
+
+During the switch, keep the old `driver-assignments/unpaid` and `driver-assignments/pay` endpoints working. `pay` should create a cash payout with no adjustments.
+
+---
+
+## 4. Release to production
 
 When sections 1 and 2 are done, deploy the `backend-test` changes to `backend-new`. Tell us when it's live; we then switch production to the new request formats by setting `VITE_API_VERSION=2`. The new formats are:
 - `POST /reconcilation-parcels` takes `{ "items": [...] }`;
@@ -135,7 +292,7 @@ Until then, the station pickup charge can't be saved on production, because `bac
 
 ---
 
-## 4. Next (planned; the frontend follows once these exist)
+## 5. Next (planned; the frontend follows once these exist)
 
 The full specs are in `docs/BACKEND_HANDOFF.md` under the part named. In suggested order:
 
