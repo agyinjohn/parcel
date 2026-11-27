@@ -122,6 +122,22 @@ Affected assignment endpoints: `GET /api-frontdesk/rider/{riderId}/assignments`,
 
 Staff can save an address with its delivery cost (`POST /api-frontdesk/addresses`). If `Address` also stored `latitude`, `longitude` and `locationName`, picking a saved address could fill the pin automatically. The frontend doesn't use this yet. It is a nice follow-up, not required.
 
+### A5. Pickup location on pickup requests (required)
+
+The **Pickup Request** form now asks for two map pins: where the rider collects the parcel from the sender, and where it's delivered.
+
+- **Delivery pin:** uses the existing Part A fields (`receiverLatitude` and so on).
+- **Pickup pin:** needs new fields, on `Parcel`, `ParcelRequest`, `ParcelUpdateRequest` and `ParcelInfo`, with the same rules as the receiver fields:
+
+| Field | Type |
+|---|---|
+| `pickupLatitude`, `pickupLongitude` | number, nullable |
+| `pickupLocationName` | string |
+| `pickupPlaceId` | string, nullable |
+| `pickupLocationSource` | `SEARCH` or `MAP_PIN` |
+
+Return them on every parcel response, including the rider's assignments, so the rider app can route to the pickup point first.
+
 ---
 
 ## Part B: Rider tracking pages (access and volume)
@@ -1232,6 +1248,7 @@ Once A3 is in place, the frontend team should:
 - [ ] M4 Driver balances, statement and summary from the server.
 - [ ] M5–M6 Payouts (with SMS confirmation and reversal), holds and adjustments.
 - [ ] M7 Driver cash payouts in the counter cash-up. M8 reports *(recommended)*.
+- [ ] A5 Pickup location fields (`pickupLatitude`, `pickupLongitude`, `pickupLocationName`, `pickupPlaceId`, `pickupLocationSource`).
 - [ ] H5 Fuel accountability: per-bike km per litre, allowance per assignment, fill-window records (planned vs actual km and litres), rider explanations, manager decisions, summary.
 - [ ] I Fleet maintenance: vehicles, assignments, service plans and schedules, records, defects, documents, costs, GPS odometer.
 

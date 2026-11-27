@@ -83,6 +83,13 @@ interface ParcelRequest {
     receiverLocationName?: string;
     receiverPlaceId?: string;
     receiverLocationSource?: "SEARCH" | "MAP_PIN";
+
+    // Pinned pickup location for pickup requests (proposed, handoff Part A5).
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    pickupLocationName?: string;
+    pickupPlaceId?: string;
+    pickupLocationSource?: "SEARCH" | "MAP_PIN";
 }
 
 interface ParcelUpdateRequest {

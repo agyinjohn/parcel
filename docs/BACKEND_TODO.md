@@ -5,7 +5,7 @@ This is the short list for the backend, as of 27 Nov 2026. It was checked agains
 "Part J/K/L" references point to the full handoff doc; section 2 here is its Part L.
 
 Work in this order:
-1. **Fix three things on `backend-test`**, which the frontend relies on.
+1. **Fix four things on `backend-test`**, which the frontend relies on.
 2. **Counter pickup payments and cash-up.** The frontend is built and waiting.
 3. **Driver payments, the new design.** The frontend will be rebuilt on these endpoints.
 4. **Release `backend-test` to production** (`backend-new`).
@@ -19,6 +19,7 @@ Work in this order:
 |---|---|---|
 | **Parcel search** | The `search` query parameter was removed from `GET /api-frontdesk/parcels` and `GET /api-admin/parcels`. Parcel Search now sends `search` (name, parcel ID, phone), so searching stops working. | Put `search` back on both: a contains match on receiver name, parcel ID, receiver phone and sender phone. |
 | **Company sign-up** | `POST /api-company/register`, `/verify-email` and `/resend-verification` were removed. The Signup and Verify Email pages use them. | Restore them, or confirm they're gone for good, and we'll remove those pages. |
+| **Pickup location pin** | The Pickup Request form now sends the sender's location as a map pin, but the API has no fields for it. | Add `pickupLatitude`, `pickupLongitude`, `pickupLocationName`, `pickupPlaceId` and `pickupLocationSource` to `Parcel`, `ParcelRequest`, `ParcelUpdateRequest` and `ParcelInfo` (handoff A5), and return them on rider assignments. |
 | **Multi-company** | `companyId` was removed from most records and from the login response, and `SUPERADMIN` from the roles. | Confirm whether this is intended. The Super Admin pages (tenants, cross-tenant analytics) depend on it. |
 
 ## 2. Counter pickup payments and daily cash-up (required)
