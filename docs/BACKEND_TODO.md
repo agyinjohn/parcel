@@ -1,15 +1,22 @@
 # Backend: what to work on now
 
-This is the short list for the backend, as of 27 Nov 2026. It was checked against `https://backend-test.mandmservicescorp.org/shortly/v3/api-docs`. Everything else from the full handoff doc (`docs/BACKEND_HANDOFF.md`) is already in place on `backend-test`: delivery pins, rider locations and delivery check, route plans, the pickup charge, reconciliation lines, and station or location delete.
+This is the short list for the backend, as of 28 Nov 2026. It was checked against `https://backend-test.mandmservicescorp.org/shortly/v3/api-docs`.
 
-"Part J/K/L" references point to the full handoff doc; section 2 here is its Part L.
+**Done on `backend-test`, and the frontend now uses it** (test build: `npm run build:test`):
+- **Parcel search:** the `search` filter is back.
+- **Company sign-up:** restored.
+- **Multi-company:** `companyId` is back.
+- **Counter pickup payments and cash-up (Part L):** payments at pickup, collections, cash movements, close the day, and corrections.
+- **Driver payments (Part M):** drivers, trips, fee states, balances, statement, payouts with SMS confirmation and reversal, holds, adjustments, and the pay policy.
+- **Reports:** admin reports exist; the frontend screens for them will follow.
 
-Work in this order:
-1. **Fix four things on `backend-test`**, which the frontend relies on.
-2. **Counter pickup payments and cash-up.** The frontend is built and waiting.
-3. **Driver payments, the new design.** The frontend will be rebuilt on these endpoints.
-4. **Release `backend-test` to production** (`backend-new`).
-5. **Next features:** notifications, settings, fuel, motorbikes. These are planned; the frontend will follow.
+**Still needed, in this order:**
+1. **Pickup location pin (A5).** The Pickup Request form sends `pickupLatitude`, `pickupLongitude`, `pickupLocationName`, `pickupPlaceId` and `pickupLocationSource`, but `Parcel`, `ParcelRequest`, `ParcelUpdateRequest` and `ParcelInfo` don't have them yet. Return them on rider assignments too.
+2. **Schema name clash.** The new driver-payments summary schema is called `Summary`, and `DeliveryCheckResponse.summary` now points to it. The API description therefore shows the delivery check's summary with the driver-payment fields. Rename one of them, e.g. `DriverPaymentsSummary`. The responses are probably right; it's the documentation that's wrong.
+3. **Release to production.** Deploy `backend-test` to `backend-new`, then tell us, and we set `VITE_API_VERSION=2` for production. Until then production uses the old formats, and the counter cash-up, driver payments and pickup charge don't work there.
+4. **Planned next:** the reconciliation variance report and rider shortfall balance (K3), notifications (G3), settings saved on the server (G2), rider earnings (G4), fuel (H) and motorbike maintenance (I). See section 5 below and the full handoff doc.
+
+The sections below are kept for reference. Sections 1 to 3 are done on `backend-test`, except the pickup pin.
 
 ---
 

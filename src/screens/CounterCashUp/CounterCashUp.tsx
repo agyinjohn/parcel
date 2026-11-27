@@ -5,7 +5,8 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useToast } from "../../components/ui/toast";
 import { useStation } from "../../contexts/StationContext";
-import frontdeskService, { type CashUpRecord } from "../../services/frontdeskService";
+import frontdeskService, { type CashMovements, type CashUpRecord } from "../../services/frontdeskService";
+import { API_V2 } from "../../config/api";
 import { cashUpTotals, type CounterCollection } from "../../utils/counterPickup";
 import { formatCurrency, formatPhoneNumber } from "../../utils/dataHelpers";
 
@@ -21,7 +22,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  */
 export const CounterCashUp = (): JSX.Element => {
     const { showToast } = useToast();
-    const { userOfficeName } = useStation();
+    const { userOfficeName, userRole } = useStation();
+    const isManager = userRole === "MANAGER";
     const [date, setDate] = useState(todayLocal);
     const [rows, setRows] = useState<CounterCollection[]>([]);
     const [closed, setClosed] = useState<CashUpRecord | null>(null);
@@ -30,16 +32,27 @@ export const CounterCashUp = (): JSX.Element => {
     const [counted, setCounted] = useState("");
     const [note, setNote] = useState("");
     const [saving, setSaving] = useState(false);
+    const [moves, setMoves] = useState<CashMovements | null>(null);
+    const [fixAmount, setFixAmount] = useState("");
+    const [fixReason, setFixReason] = useState("");
 
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
-        const [list, cu] = await Promise.all([frontdeskService.getCounterCollections(date), frontdeskService.getCashUp(date)]);
+        // Updated backend: one call with counter takings and the cash paid out to drivers.
+        const mv = API_V2 ? await frontdeskService.getCashMovements(date) : null;
+        const [list, cu] = await Promise.all([
+            mv?.success ? Promise.resolve({ success: true, data: mv.data!.collections, message: "" }) : frontdeskService.getCounterCollections(date),
+            frontdeskService.getCashUp(date),
+        ]);
+        setMoves(mv?.success ? mv.data ?? null : null);
         if (list.success) setRows([...(list.data ?? [])].sort((a, b) => a.pickedUpAt - b.pickedUpAt));
         else {
             setRows([]);
             setError(list.message || "Couldn't load the counter collections.");
         }
+        setFixAmount("");
+        setFixReason("");
         setClosed(cu.success ? cu.data ?? null : null);
         setCounted("");
         setNote("");
@@ -49,9 +62,12 @@ export const CounterCashUp = (): JSX.Element => {
     useEffect(() => { load(); }, [load]);
 
     const t = useMemo(() => cashUpTotals(rows), [rows]);
+    const driverOut = moves ? round2((moves.totals.driverCashPayouts || 0) + (moves.totals.driverCashAdvances || 0)) : 0;
+    // The server's figure wins: counter cash taken − cash paid out to drivers.
+    const expectedCash = moves ? moves.totals.expectedCash : t.cash;
     const countedNum = counted.trim() === "" ? null : Number(counted);
     const countedValid = countedNum !== null && Number.isFinite(countedNum) && countedNum >= 0;
-    const drawerDiff = countedValid ? round2((countedNum as number) - t.cash) : 0;
+    const drawerDiff = countedValid ? round2((countedNum as number) - expectedCash) : 0;
     const isToday = date === todayLocal();
     const canClose = countedValid && (drawerDiff === 0 || note.trim().length > 0) && !saving;
 
@@ -60,7 +76,7 @@ export const CounterCashUp = (): JSX.Element => {
         setSaving(true);
         const res = await frontdeskService.submitCashUp({
             date,
-            expectedCash: t.cash,
+            expectedCash,
             countedCash: round2(countedNum as number),
             expectedMomo: t.momo,
             varianceAmount: drawerDiff,
@@ -71,6 +87,16 @@ export const CounterCashUp = (): JSX.Element => {
             showToast("Cash-up saved", "success");
             load();
         } else showToast(res.message || "Couldn't save the cash-up", "error");
+    };
+
+    const closedDiff = closed ? closed.cashDifference ?? closed.varianceAmount ?? round2(closed.countedCash - closed.expectedCash) : 0;
+    const fixNum = Number(fixAmount);
+    const addCorrection = async () => {
+        if (!fixNum || !fixReason.trim()) return;
+        setSaving(true);
+        const res = await frontdeskService.addCashUpCorrection({ date, amount: fixNum, reason: fixReason.trim() });
+        setSaving(false);
+        if (res.success) { showToast("Correction added", "success"); load(); } else showToast(res.message || "Couldn't add the correction", "error");
     };
 
     const tile = (label: string, value: string, sub?: string, tone = "text-neutral-900") => (
@@ -117,7 +143,7 @@ export const CounterCashUp = (): JSX.Element => {
                     {tile("Pickups", String(t.count))}
                     {tile("Amount due", formatCurrency(t.due))}
                     {tile("Received", formatCurrency(t.paid))}
-                    {tile("Cash", formatCurrency(t.cash), "Should be in the drawer")}
+                    {tile("Cash in drawer", formatCurrency(expectedCash), driverOut ? `${formatCurrency(t.cash)} taken − ${formatCurrency(driverOut)} paid to drivers` : "Should be in the drawer")}
                     {tile("Mobile money", formatCurrency(t.momo), "Check against the MoMo account")}
                     {tile("Short / over", formatCurrency(t.variance), t.short ? `${t.short} pickup${t.short === 1 ? "" : "s"} paid less` : "All paid in full", t.variance < 0 ? "text-red-600" : t.variance > 0 ? "text-amber-600" : "text-green-700")}
                 </div>
@@ -187,8 +213,34 @@ export const CounterCashUp = (): JSX.Element => {
                         </CardContent>
                     </Card>
 
+                    {moves && (moves.driverCashPayouts.length > 0 || moves.driverCashAdvances.length > 0) && (
+                        <Card className="border border-[#e3e3e3] bg-white overflow-hidden xl:col-start-1">
+                            <CardContent className="p-0">
+                                <p className="border-b border-neutral-100 bg-gray-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Cash paid out to drivers</p>
+                                <table className="w-full text-sm">
+                                    <tbody>
+                                        {moves.driverCashPayouts.map((p) => (
+                                            <tr key={p.id} className="border-b border-neutral-50 last:border-0">
+                                                <td className="px-4 py-2.5 tabular-nums text-neutral-600 whitespace-nowrap">{p.paidAt ? new Date(p.paidAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</td>
+                                                <td className="px-4 py-2.5">Payout {p.receiptNo ?? ""} · {p.driverName}{p.paidByName ? <span className="text-neutral-400"> · by {p.paidByName}</span> : null}</td>
+                                                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-red-600">− {formatCurrency(p.netAmount)}</td>
+                                            </tr>
+                                        ))}
+                                        {moves.driverCashAdvances.map((a) => (
+                                            <tr key={a.id} className="border-b border-neutral-50 last:border-0">
+                                                <td className="px-4 py-2.5 tabular-nums text-neutral-600 whitespace-nowrap">{a.createdAt ? new Date(a.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</td>
+                                                <td className="px-4 py-2.5">Advance{a.reason ? `: ${a.reason}` : ""}{a.createdByName ? <span className="text-neutral-400"> · by {a.createdByName}</span> : null}</td>
+                                                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-red-600">− {formatCurrency(a.amount)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Close the day */}
-                    <Card className="border border-[#e3e3e3] bg-white self-start">
+                    <Card className="border border-[#e3e3e3] bg-white self-start xl:col-start-2 xl:row-start-1 xl:row-span-2">
                         <CardContent className="p-5 space-y-4">
                             {closed ? (
                                 <>
@@ -200,7 +252,10 @@ export const CounterCashUp = (): JSX.Element => {
                                         <dt className="text-neutral-500">Cash expected</dt><dd className="text-right tabular-nums">{formatCurrency(closed.expectedCash)}</dd>
                                         <dt className="text-neutral-500">Cash counted</dt><dd className="text-right tabular-nums">{formatCurrency(closed.countedCash)}</dd>
                                         <dt className="text-neutral-500">Difference</dt>
-                                        <dd className={`text-right tabular-nums font-semibold ${closed.varianceAmount < 0 ? "text-red-600" : closed.varianceAmount > 0 ? "text-amber-600" : "text-green-700"}`}>{formatCurrency(closed.varianceAmount)}</dd>
+                                        <dd className={`text-right tabular-nums font-semibold ${closedDiff < 0 ? "text-red-600" : closedDiff > 0 ? "text-amber-600" : "text-green-700"}`}>{formatCurrency(closedDiff)}</dd>
+                                        {(closed.driverCashPayouts || closed.driverCashAdvances) ? (<>
+                                            <dt className="text-neutral-500">Paid to drivers</dt><dd className="text-right tabular-nums">{formatCurrency((closed.driverCashPayouts || 0) + (closed.driverCashAdvances || 0))}</dd>
+                                        </>) : null}
                                         <dt className="text-neutral-500">Mobile money</dt><dd className="text-right tabular-nums">{formatCurrency(closed.expectedMomo)}</dd>
                                     </dl>
                                     {closed.note && <p className="text-xs text-neutral-600 bg-gray-50 rounded-md p-2">{closed.note}</p>}
@@ -208,6 +263,23 @@ export const CounterCashUp = (): JSX.Element => {
                                         {closed.closedByName ? `Closed by ${closed.closedByName}` : "Closed"}
                                         {closed.closedAt ? ` at ${new Date(closed.closedAt).toLocaleString()}` : ""}
                                     </p>
+                                    {(closed.adjustments ?? []).length > 0 && (
+                                        <div className="space-y-1 border-t border-[#f0f0f0] pt-3">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">Corrections</p>
+                                            {closed.adjustments!.map((a, i) => (
+                                                <div key={i} className="flex justify-between gap-2 text-xs"><span className="text-neutral-600">{a.reason}{a.byName ? ` · ${a.byName}` : ""}</span><span className="tabular-nums font-medium">{a.amount > 0 ? "+" : ""}{formatCurrency(a.amount)}</span></div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {isManager && API_V2 && (
+                                        <div className="space-y-2 border-t border-[#f0f0f0] pt-3">
+                                            <p className="text-xs font-semibold text-neutral-700">Add a correction</p>
+                                            <p className="text-[11px] text-neutral-400">Closed days aren't edited. Record found cash as + and missing cash as −.</p>
+                                            <Input id="cashup-fix-amount" aria-label="Correction amount" type="number" step="0.01" value={fixAmount} onChange={(e) => setFixAmount(e.target.value)} placeholder="e.g. 20 or -5" className="border-[#d1d1d1] tabular-nums" />
+                                            <Input id="cashup-fix-reason" aria-label="Correction reason" value={fixReason} onChange={(e) => setFixReason(e.target.value)} placeholder="Reason" className="border-[#d1d1d1]" />
+                                            <Button variant="outline" size="sm" className="w-full border-[#d1d1d1]" disabled={!fixNum || !fixReason.trim() || saving} onClick={addCorrection}>Add correction</Button>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <>
@@ -217,9 +289,12 @@ export const CounterCashUp = (): JSX.Element => {
                                             Count the cash in the drawer and enter it. {isToday ? "Do this at the end of the day." : ""}
                                         </p>
                                     </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-neutral-500">Cash expected</span>
-                                        <span className="font-semibold tabular-nums">{formatCurrency(t.cash)}</span>
+                                    <div className="space-y-1 text-sm">
+                                        {driverOut > 0 && (<>
+                                            <div className="flex justify-between text-neutral-500"><span>Counter cash taken</span><span className="tabular-nums">{formatCurrency(t.cash)}</span></div>
+                                            <div className="flex justify-between text-neutral-500"><span>Paid out to drivers</span><span className="tabular-nums">− {formatCurrency(driverOut)}</span></div>
+                                        </>)}
+                                        <div className="flex justify-between"><span className="text-neutral-500">Cash expected</span><span className="font-semibold tabular-nums">{formatCurrency(expectedCash)}</span></div>
                                     </div>
                                     <div>
                                         <label htmlFor="cashup-counted" className="block text-xs font-semibold text-neutral-700 mb-1">Cash counted (GHC)</label>
@@ -231,7 +306,7 @@ export const CounterCashUp = (): JSX.Element => {
                                             inputMode="decimal"
                                             value={counted}
                                             onChange={(e) => setCounted(e.target.value)}
-                                            placeholder={t.cash.toFixed(2)}
+                                            placeholder={expectedCash.toFixed(2)}
                                             className="border-[#d1d1d1] tabular-nums"
                                         />
                                     </div>

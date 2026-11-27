@@ -22,7 +22,19 @@ To see the exact request and response shapes the frontend expects, run the front
 
 ---
 
-## Status on `backend-test` (checked 23 Nov 2026)
+## Status on `backend-test` (updated 28 Nov 2026)
+
+**Since 23 Nov:**
+- **Parts L and M are in place:** counter payments and cash-up, and driver payments.
+- **Restored:** company sign-up, `search` and `companyId`.
+- **The frontend uses all of these in the test build.**
+
+**Still open:**
+- **A5:** pickup location fields.
+- **Schema name clash:** the `Summary` schema is shared between driver payments and the delivery check.
+- **Production:** the release to `backend-new`.
+
+### Earlier check (23 Nov 2026)
 
 The API description at `https://backend-test.mandmservicescorp.org/shortly/v3/api-docs` was compared with this document. The frontend's test build (`npm run build:test`, which sets `VITE_API_VERSION=2`) uses the new shapes. The production build still uses the current backend's shapes until these changes reach `backend-new`.
 

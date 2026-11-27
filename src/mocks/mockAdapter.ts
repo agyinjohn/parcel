@@ -9,6 +9,7 @@ import {
     locationsWithOffices, serializeAssignment, serializeParcel, only, USER_FIELDS, riderLocationNow, riderTrackPoints, MockParcel,
 } from "./mockData";
 import API_BASE_URL from "../config/api";
+import { registerDriverPayments, driverCashOn } from "./driverPaymentsMock";
 import { analyzeOffTask, checkDeliveries, normalizePoints, summarize, type DeliveryStop } from "../screens/RiderMap/trackUtils";
 
 /** Builds a DeliveryCheckResponse (updated backend) from the sample track and assignments. */
@@ -249,6 +250,27 @@ on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
     const day = params.get("date") ?? localDay(Date.now());
     return COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
 });
+registerDriverPayments(on, { driverAssignments: DRIVER_ASSIGNMENTS, findParcel, officeId: HOME_OFFICE.id, page });
+
+// Everything through the drawer for a day: counter takings in, driver cash payouts and advances out.
+const cashMovements = (day: string) => {
+    const collections = COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
+    const driver = driverCashOn(day);
+    const sum = (xs: any[], f: (x: any) => number) => Math.round(xs.reduce((s, x) => s + (f(x) || 0), 0) * 100) / 100;
+    const counterCash = sum(collections.filter((c) => c.paymentMethod === "CASH"), (c) => c.amountPaid);
+    const momo = sum(collections.filter((c) => c.paymentMethod === "MOMO"), (c) => c.amountPaid);
+    const driverCashPayouts = sum(driver.payouts, (p) => p.netAmount);
+    const driverCashAdvances = sum(driver.advances, (a) => a.amount);
+    return {
+        date: day, officeId: HOME_OFFICE.id, closed: !!CASH_UPS[day], collections, driverCashPayouts: driver.payouts, driverCashAdvances: driver.advances,
+        totals: {
+            count: collections.length, due: sum(collections, (c) => c.amountDue), received: sum(collections, (c) => c.amountPaid), counterCash, momo,
+            shortOver: sum(collections, (c) => c.varianceAmount), driverCashPayouts, driverCashAdvances,
+            expectedCash: Math.round((counterCash - driverCashPayouts - driverCashAdvances) * 100) / 100, expectedMomo: momo,
+        },
+    };
+};
+on("get", /^\/api-frontdesk\/counter-cash-movements$/, ({ params }) => cashMovements(params.get("date") ?? localDay(Date.now())));
 on("get", /^\/api-frontdesk\/counter-cashup$/, ({ params }) => {
     const rec = CASH_UPS[params.get("date") ?? ""];
     if (!rec) throw { status: 404, message: "Not closed" };
@@ -256,8 +278,23 @@ on("get", /^\/api-frontdesk\/counter-cashup$/, ({ params }) => {
 });
 on("post", /^\/api-frontdesk\/counter-cashup$/, ({ body }) => {
     if (CASH_UPS[body?.date]) throw { status: 409, message: "This day is already closed" };
-    CASH_UPS[body.date] = { ...body, closedAt: Date.now(), closedByName: "Kofi Mensah" };
-    return ok("Cash-up saved");
+    const m = cashMovements(body.date);
+    // Like the backend: expected figures are recomputed on the server.
+    CASH_UPS[body.date] = {
+        id: `cu-${body.date}`, officeId: HOME_OFFICE.id, date: body.date, expectedCash: m.totals.expectedCash, countedCash: Number(body.countedCash),
+        cashDifference: Math.round((Number(body.countedCash) - m.totals.expectedCash) * 100) / 100, expectedMomo: m.totals.expectedMomo, note: body.note,
+        collectionCount: m.totals.count, totalDue: m.totals.due, totalReceived: m.totals.received, counterCash: m.totals.counterCash,
+        driverCashPayouts: m.totals.driverCashPayouts, driverCashAdvances: m.totals.driverCashAdvances, shortOver: m.totals.shortOver,
+        closedAt: Date.now(), closedByName: "Kofi Mensah", adjustments: [],
+    };
+    return { message: "Cash-up saved" };
+});
+on("post", /^\/api-frontdesk\/counter-cashup\/adjustments$/, ({ body }) => {
+    const rec = CASH_UPS[body?.date];
+    if (!rec) throw { status: 404, message: "That day isn't closed" };
+    if (!body?.reason || !Number(body?.amount)) throw { status: 400, message: "Amount and reason are required" };
+    rec.adjustments.push({ amount: Number(body.amount), reason: body.reason, at: Date.now(), byName: "Kofi Mensah" });
+    return rec;
 });
 on("post", /^\/api-frontdesk\/assign-parcels$/, ({ body }) => {
     const ids: string[] = body?.parcelIds ?? [];
@@ -300,6 +337,8 @@ const applyStationUpdate = (officeId: string, body: any) => {
         (office as any).pickupChargeEnabled = !!body.pickupChargeEnabled;
         (office as any).pickupChargeAmount = body.pickupChargeEnabled ? Number(body.pickupChargeAmount) || 0 : null;
     }
+    if (body?.driverPayPolicy) (office as any).driverPayPolicy = body.driverPayPolicy;
+    if (body?.code) office.code = body.code;
     return ok("Station updated");
 };
 on("put", /^\/api-admin\/office\/([^/]+)$/, ({ match, body }) => applyStationUpdate(match[1], body));
