@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, RefreshCw, Search, Navigation, AlertTriangle, History } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
-import { Button } from "../../components/ui/button";
+import { MapPin, RefreshCw, Search, Navigation, AlertTriangle, History, PanelLeftClose, Users, Maximize2 } from "lucide-react";
 import { useStation } from "../../contexts/StationContext";
 import { useLocation as useLocations } from "../../contexts/LocationContext";
 import adminService, { RiderLocation } from "../../services/adminService";
@@ -212,7 +210,8 @@ export const RiderMap = (): JSX.Element => {
                     zoom: 12,
                     mapTypeControl: false,
                     streetViewControl: false,
-                    fullscreenControl: true,
+                    fullscreenControl: false,
+                    zoomControlOptions: { position: g.maps.ControlPosition?.RIGHT_BOTTOM },
                 });
                 infoRef.current = new g.maps.InfoWindow();
                 setMapReady(true);
@@ -329,158 +328,204 @@ export const RiderMap = (): JSX.Element => {
         });
     }, [visibleRiders, states]);
 
+    // Fill the space under the top bar on large screens; Google Maps needs an explicit height.
+    const shellRef = useRef<HTMLDivElement>(null);
+    const [shellHeight, setShellHeight] = useState<number | null>(null);
+    useEffect(() => {
+        const mq = window.matchMedia("(min-width: 1024px)");
+        const measure = () => {
+            const el = shellRef.current;
+            if (!el || !mq.matches) return setShellHeight(null);
+            setShellHeight(Math.max(480, window.innerHeight - el.getBoundingClientRect().top - window.scrollY));
+        };
+        measure();
+        window.addEventListener("resize", measure);
+        mq.addEventListener?.("change", measure);
+        return () => { window.removeEventListener("resize", measure); mq.removeEventListener?.("change", measure); };
+    }, []);
+    useEffect(() => {
+        const g = (window as any).google;
+        if (mapReady && mapRef.current && g?.maps?.event?.trigger) g.maps.event.trigger(mapRef.current, "resize");
+    }, [shellHeight, mapReady]);
+
+    const [panelOpen, setPanelOpen] = useState(true);
+    const fitAll = () => { fittedRef.current = false; setStates((s) => ({ ...s })); };
+    const located = counts.live + counts.stale;
+    const updated = lastUpdated ? new Date(lastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null;
+
+    const chip = (dot: string, text: string, muted = false) => (
+        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${muted ? "text-[#6b7280]" : "text-neutral-800"}`}>
+            <span className={`h-2 w-2 rounded-full ${dot}`} /> {text}
+        </span>
+    );
+
     return (
-        <div className="w-full">
-            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div>
-                        <h1 className="text-2xl font-bold text-neutral-800">Rider Map</h1>
-                        <p className="text-sm text-[#5d5d5d] mt-1">
-                            {isAdmin ? "All stations" : userOfficeName ?? "Your station"} · GPS positions refresh every 30 seconds
-                            {lastUpdated && <> · updated {new Date(lastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>}
-                        </p>
+        <div ref={shellRef} className="relative w-full flex flex-col lg:block" style={shellHeight ? { height: shellHeight } : undefined}>
+            {/* Map: fills the page on large screens */}
+            <div className="relative h-[58vh] min-h-[320px] lg:absolute lg:inset-0 lg:h-auto">
+                <div ref={mapEl} className="absolute inset-0 bg-[#e8ebe8]" />
+                {mapReady && !mapError && (
+                    <div className={`hidden lg:block`}>
+                        {/* Keep the key clear of the floating panel. */}
+                        <div className={`absolute bottom-0 ${panelOpen ? "left-[372px]" : "left-0"} right-0 top-0 pointer-events-none [&>*]:pointer-events-auto`}>
+                            {historyRider ? <MapLegend title="Route history" items={HISTORY_LEGEND} /> : <MapLegend title="Riders" items={LIVE_LEGEND} />}
+                        </div>
                     </div>
-                    <Button
-                        onClick={() => refresh(visibleRiders, true)}
-                        disabled={refreshing || visibleRiders.length === 0}
-                        variant="outline"
-                        className="border border-[#d1d1d1] flex items-center gap-2"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-                        Refresh
-                    </Button>
-                </div>
-
-                {/* Summary */}
-                <div className="flex flex-wrap gap-2 text-sm">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#d1d1d1] bg-white px-3 py-1">
-                        <span className="h-2 w-2 rounded-full bg-green-500" /> {counts.live} live
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#d1d1d1] bg-white px-3 py-1">
-                        <span className="h-2 w-2 rounded-full bg-amber-500" /> {counts.stale} seen earlier
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#d1d1d1] bg-white px-3 py-1 text-[#5d5d5d]">
-                        <span className="h-2 w-2 rounded-full bg-gray-300" /> {counts.noDevice} without GPS device
-                    </span>
-                    {counts.noSignal > 0 && (
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#d1d1d1] bg-white px-3 py-1 text-[#5d5d5d]">
-                            <span className="h-2 w-2 rounded-full bg-gray-300" /> {counts.noSignal} no GPS signal
-                        </span>
-                    )}
-                    {counts.other > 0 && (
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#d1d1d1] bg-white px-3 py-1 text-[#5d5d5d]">
-                            <span className="h-2 w-2 rounded-full bg-red-500" /> {counts.other} unavailable
-                        </span>
-                    )}
-                </div>
-
-                {allForbidden && (
-                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                        Your account isn't allowed to read rider locations. Ask an administrator for access.
+                )}
+                {mapReady && !mapError && (
+                    <div className="lg:hidden">
+                        {historyRider ? <MapLegend title="Route history" items={HISTORY_LEGEND} /> : <MapLegend title="Riders" items={LIVE_LEGEND} />}
+                    </div>
+                )}
+                {mapError && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-gray-50 text-center p-6">
+                        <MapPin className="w-8 h-8 text-gray-300" />
+                        <p className="text-sm font-medium text-neutral-700">The map couldn't load</p>
+                        <p className="text-xs text-[#5d5d5d] max-w-xs">{mapError} Rider positions are still listed in the panel.</p>
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4">
-                    {/* Map (first on phones) */}
-                    <Card className="order-1 lg:order-2 border border-[#d1d1d1] bg-white overflow-hidden">
-                        <div className="relative h-[360px] lg:h-[calc(100vh-260px)] lg:min-h-[480px]">
-                            <div ref={mapEl} className="absolute inset-0" />
-                            {mapReady && !mapError && (
-                                historyRider
-                                    ? <MapLegend title="Route history" items={HISTORY_LEGEND} />
-                                    : <MapLegend title="Riders" items={LIVE_LEGEND} />
-                            )}
-                            {mapError && (
-                                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-gray-50 text-center p-6">
-                                    <MapPin className="w-8 h-8 text-gray-300" />
-                                    <p className="text-sm font-medium text-neutral-700">The map couldn't load</p>
-                                    <p className="text-xs text-[#5d5d5d] max-w-xs">{mapError} Rider positions are still listed here.</p>
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-
-                    {/* Rider list, or the route history panel */}
-                    <Card className="order-2 lg:order-1 border border-[#d1d1d1] bg-white">
-                        <CardContent className="p-0">
-                            {historyRider ? (
-                                <RouteHistoryPanel
-                                    key={historyRider.userId}
-                                    rider={historyRider}
-                                    map={mapReady ? mapRef.current : null}
-                                    onClose={() => { setHistoryRider(null); fittedRef.current = false; }}
-                                />
-                            ) : (<>
-                            <div className="p-3 border-b border-[#ececec] space-y-2">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <input
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Search rider or phone"
-                                        className="w-full h-10 pl-9 pr-3 rounded-lg border border-[#d1d1d1] text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]/30"
-                                    />
-                                </div>
-                                {isAdmin && (
-                                    <select
-                                        value={stationFilter}
-                                        onChange={(e) => { setStationFilter(e.target.value); fittedRef.current = false; }}
-                                        className="w-full h-10 px-3 rounded-lg border border-[#d1d1d1] text-sm bg-white"
-                                    >
-                                        <option value="">All stations</option>
-                                        {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                )}
-                            </div>
-
-                            {ridersError ? (
-                                <p className="p-6 text-sm text-red-600">{ridersError}</p>
-                            ) : sortedRiders.length === 0 ? (
-                                <p className="p-6 text-sm text-[#5d5d5d]">{riders.length === 0 ? "Loading riders…" : "No riders match."}</p>
-                            ) : (
-                                <ul className="divide-y divide-[#ececec] max-h-[calc(100vh-330px)] min-h-[200px] overflow-y-auto">
-                                    {sortedRiders.map((r) => {
-                                        const st = states[r.userId] ?? { kind: "loading" };
-                                        const d = describe(st);
-                                        const clickable = st.kind === "located";
-                                        return (
-                                            <li key={r.userId} className={`flex items-center ${selected === r.userId ? "bg-orange-50" : ""}`}>
-                                                <button
-                                                    onClick={() => clickable && setSelected(r.userId)}
-                                                    className={`min-w-0 flex-1 flex items-center gap-3 pl-4 pr-2 py-3 text-left ${clickable ? "hover:bg-gray-50" : "cursor-default"}`}
-                                                >
-                                                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${TONE_DOT[d.tone]}`} />
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-sm font-medium text-neutral-800 truncate">{r.name}</p>
-                                                        <p className="text-xs text-[#9a9a9a] truncate">
-                                                            {r.phoneNumber}
-                                                            {isAdmin && r.officeId && ` · ${stations.find((s) => s.id === r.officeId)?.name ?? ""}`}
-                                                        </p>
-                                                    </div>
-                                                    <span className={`text-xs font-medium text-right ${TONE_TEXT[d.tone]}`}>{d.label}</span>
-                                                    {clickable && <Navigation className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
-                                                </button>
-                                                <button
-                                                    onClick={() => { infoRef.current?.close?.(); setSelected(null); setHistoryRider(r); }}
-                                                    disabled={st.kind === "no-device" || st.kind === "not-found"}
-                                                    className="mr-2 h-8 w-8 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-neutral-800 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-transparent"
-                                                    title={st.kind === "no-device" ? "No GPS device, so no history" : `View ${r.name}'s route history`}
-                                                    aria-label={`View route history for ${r.name}`}
-                                                >
-                                                    <History className="w-4 h-4" />
-                                                </button>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            )}
-                            </>)}
-                        </CardContent>
-                    </Card>
+                {/* Status bar */}
+                <div className="absolute top-3 right-3 left-3 lg:left-auto z-10 flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-white/95 px-3.5 py-2 text-[13px] shadow-md ring-1 ring-black/5 backdrop-blur">
+                        {chip("bg-green-500", `${counts.live} live`)}
+                        {chip("bg-amber-500", `${counts.stale} seen earlier`)}
+                        {chip("bg-gray-300", `${counts.noDevice} no device`, true)}
+                        {counts.noSignal > 0 && chip("bg-gray-300", `${counts.noSignal} no signal`, true)}
+                        {counts.other > 0 && chip("bg-red-500", `${counts.other} unavailable`, true)}
+                        {updated && <span className="hidden sm:inline text-[12px] text-[#9a9a9a] whitespace-nowrap">Updated {updated}</span>}
+                    </div>
+                    {!historyRider && located > 0 && (
+                        <button onClick={fitAll} className="flex items-center gap-1.5 rounded-xl bg-white/95 px-3 py-2 text-[13px] font-medium text-neutral-700 shadow-md ring-1 ring-black/5 hover:bg-white" title="Show every rider">
+                            <Maximize2 className="w-4 h-4" /> Fit all
+                        </button>
+                    )}
+                    <button
+                        onClick={() => refresh(visibleRiders, true)}
+                        disabled={refreshing || visibleRiders.length === 0}
+                        className="flex items-center gap-1.5 rounded-xl bg-white/95 px-3 py-2 text-[13px] font-medium text-neutral-700 shadow-md ring-1 ring-black/5 hover:bg-white disabled:opacity-60"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+                    </button>
                 </div>
+
+                {/* Reopen the panel */}
+                {!panelOpen && (
+                    <button
+                        onClick={() => setPanelOpen(true)}
+                        className="hidden lg:flex absolute top-3 left-3 z-10 items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-[13px] font-semibold text-neutral-800 shadow-md ring-1 ring-black/5 hover:bg-orange-50"
+                    >
+                        <Users className="w-4 h-4 text-[#ea690c]" /> {historyRider ? `${historyRider.name} · route history` : `Riders · ${visibleRiders.length}`}
+                    </button>
+                )}
             </div>
+
+            {/* Rider panel: floats over the map on large screens, sits under it on phones */}
+            <section
+                aria-label={historyRider ? "Route history" : "Riders"}
+                className={`relative z-10 bg-white lg:absolute lg:top-3 lg:left-3 lg:bottom-3 lg:w-[356px] lg:rounded-2xl lg:shadow-xl lg:ring-1 lg:ring-black/5 flex flex-col overflow-hidden ${panelOpen ? "" : "lg:hidden"}`}
+            >
+                {historyRider ? (
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                        <RouteHistoryPanel
+                            key={historyRider.userId}
+                            rider={historyRider}
+                            map={mapReady ? mapRef.current : null}
+                            onClose={() => { setHistoryRider(null); fittedRef.current = false; }}
+                        />
+                    </div>
+                ) : (<>
+                    <div className="p-3 pb-2 border-b border-[#ececec] space-y-2 shrink-0">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold text-neutral-900">Riders</p>
+                                <p className="text-[11px] text-[#9a9a9a]">
+                                    {isAdmin ? (stationFilter ? stations.find((s) => s.id === stationFilter)?.name : "All stations") : userOfficeName ?? "Your station"} · refreshes every 30 s
+                                </p>
+                            </div>
+                            <button onClick={() => setPanelOpen(false)} className="hidden lg:flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label="Hide rider list" title="Hide list">
+                                <PanelLeftClose className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search rider or phone"
+                                aria-label="Search rider or phone"
+                                className="w-full h-9 pl-9 pr-3 rounded-lg bg-gray-50 border border-transparent text-sm focus:outline-none focus:bg-white focus:border-[#d1d1d1] focus:ring-2 focus:ring-[#ea690c]/20"
+                            />
+                        </div>
+                        {isAdmin && (
+                            <select
+                                value={stationFilter}
+                                onChange={(e) => { setStationFilter(e.target.value); fittedRef.current = false; }}
+                                aria-label="Station"
+                                className="w-full h-9 px-3 rounded-lg bg-gray-50 border border-transparent text-sm"
+                            >
+                                <option value="">All stations</option>
+                                {stations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        )}
+                    </div>
+
+                    {allForbidden && (
+                        <div className="m-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            Your account isn't allowed to read rider locations. Ask an administrator for access.
+                        </div>
+                    )}
+
+                    {ridersError ? (
+                        <p className="p-6 text-sm text-red-600">{ridersError}</p>
+                    ) : sortedRiders.length === 0 ? (
+                        <p className="p-6 text-sm text-[#5d5d5d]">{riders.length === 0 ? "Loading riders…" : "No riders match."}</p>
+                    ) : (
+                        <ul className="flex-1 min-h-0 overflow-y-auto py-1">
+                            {sortedRiders.map((r) => {
+                                const st = states[r.userId] ?? { kind: "loading" };
+                                const d = describe(st);
+                                const clickable = st.kind === "located";
+                                const active = selected === r.userId;
+                                return (
+                                    <li key={r.userId} className={`mx-1.5 my-0.5 flex items-center rounded-xl ${active ? "bg-orange-50 ring-1 ring-orange-200" : "hover:bg-gray-50"}`}>
+                                        <button
+                                            onClick={() => clickable && setSelected(r.userId)}
+                                            className={`min-w-0 flex-1 flex items-center gap-3 pl-2.5 pr-1 py-2 text-left ${clickable ? "" : "cursor-default"}`}
+                                        >
+                                            <span className="relative shrink-0">
+                                                <span className={`flex h-9 w-9 items-center justify-center rounded-full text-[11px] font-bold ${clickable ? "bg-neutral-800 text-white" : "bg-gray-100 text-gray-400"}`}>
+                                                    {initials(r.name)}
+                                                </span>
+                                                <span className={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full ring-2 ring-white ${TONE_DOT[d.tone]}`} />
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-sm font-medium text-neutral-800 truncate">{r.name}</span>
+                                                <span className={`block text-xs truncate ${TONE_TEXT[d.tone]}`}>{d.label}</span>
+                                                <span className="block text-[11px] text-[#9a9a9a] truncate">
+                                                    {r.phoneNumber}
+                                                    {isAdmin && r.officeId && ` · ${stations.find((s) => s.id === r.officeId)?.name ?? ""}`}
+                                                </span>
+                                            </span>
+                                            {clickable && <Navigation className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                                        </button>
+                                        <button
+                                            onClick={() => { infoRef.current?.close?.(); setSelected(null); setHistoryRider(r); setPanelOpen(true); }}
+                                            disabled={st.kind === "no-device" || st.kind === "not-found"}
+                                            className="mr-1.5 h-8 w-8 shrink-0 rounded-lg text-gray-500 hover:bg-white hover:text-neutral-800 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title={st.kind === "no-device" ? "No GPS device, so no history" : `View ${r.name}'s route history`}
+                                            aria-label={`View route history for ${r.name}`}
+                                        >
+                                            <History className="w-4 h-4" />
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </>)}
+            </section>
         </div>
     );
 };
