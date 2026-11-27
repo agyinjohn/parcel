@@ -33,6 +33,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/delivery/assignments": { title: "Package Assignments", description: "Select parcels to assign to riders" },
     "/delivery/rider-selection": { title: "Rider Selection", description: "Select an available rider for delivery" },
     "/delivery/active": { title: "Active Deliveries", description: "View and manage ongoing deliveries" },
+    "/delivery/rider-map": { title: "Rider Map", description: "Live rider positions and route history" },
     "/delivery/reconciliation": { title: "Reconciliation", description: "Reconcile rider payments and commissions" },
     "/delivery/reconciliation-confirmation": { title: "Reconciliation Confirmation", description: "Confirm reconciliation details" },
     "/delivery/analytics": { title: "Reconciliation Analytics", description: "Analytics and insights on reconciliation" },
@@ -55,6 +56,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     // Admin Shell
     "/admin/dashboard": { title: "Admin Dashboard", description: "System-wide overview and analytics" },
     "/admin/statistics": { title: "Delivery Statistics", description: "Revenue, delivery, and rider performance built from live reconciliation records" },
+    "/admin/rider-map": { title: "Rider Map", description: "Live rider positions and route history across stations" },
     "/admin/stations": { title: "Station Management", description: "Create and manage all delivery stations" },
     "/admin/users": { title: "User Management", description: "Manage all system users across stations" },
     "/admin/parcels": { title: "System Parcel Overview", description: "Global visibility of all parcels across all stations" },
