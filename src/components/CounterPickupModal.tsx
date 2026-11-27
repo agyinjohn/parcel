@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader, X, Banknote, Smartphone } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { useToast } from "./ui/toast";
 import frontdeskService from "../services/frontdeskService";
+import { useStation } from "../contexts/StationContext";
+import { useLocation as useLocations } from "../contexts/LocationContext";
 import { formatCurrency, normalizePhoneNumber, validatePhoneNumber } from "../utils/dataHelpers";
 import {
-    COUNTER_VARIANCE_REASONS, buildCounterPayment, counterCharges, parseReceived, sumCharges,
+    COUNTER_VARIANCE_REASONS, buildCounterPayment, counterCharges, initialPickupFee, parseReceived, sumCharges,
     type CounterPaymentMethod, type CounterVarianceReason,
 } from "../utils/counterPickup";
 
@@ -20,6 +22,8 @@ interface PickupParcel {
     pickUpCost?: number | null;
     itemCost?: number | null;
     pod?: boolean | null;
+    /** Some responses give the office as an object. */
+    officeId?: string | { id: string } | null;
 }
 
 interface Props {
@@ -45,13 +49,31 @@ export const CounterPickupModal = ({ parcel, onClose, onDone }: Props) => {
     const [note, setNote] = useState("");
     const [saving, setSaving] = useState(false);
 
-    const charges = useMemo(() => counterCharges(parcel), [parcel]);
+    // Pickup fee: the parcel's own, or the station's pickup charge when it's switched on (Branch Settings → Charges).
+    const { userOfficeId } = useStation();
+    const { stations, refreshLocations } = useLocations();
+    useEffect(() => {
+        if (stations.length === 0) refreshLocations();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const parcelOffice = typeof parcel.officeId === "string" ? parcel.officeId : parcel.officeId?.id;
+    const station = stations.find((s) => s.id === (parcelOffice || userOfficeId));
+    const feeStart = initialPickupFee(parcel, station);
+    const [feeInput, setFeeInput] = useState<string | null>(null); // null until staff edit it
+    const feeText = feeInput ?? (feeStart ? String(feeStart.fee) : "");
+    const feeNum = feeText.trim() === "" ? 0 : Number(feeText);
+    const feeValid = Number.isFinite(feeNum) && feeNum >= 0;
+
+    const charges = useMemo(
+        () => counterCharges({ ...parcel, pickUpCost: feeStart || feeInput !== null ? (feeValid ? feeNum : 0) : parcel.pickUpCost }),
+        [parcel, feeStart, feeInput, feeValid, feeNum],
+    );
     const due = sumCharges(charges);
     const paid = parseReceived(received, due);
     const variance = paid === null ? 0 : Math.round((paid - due) * 100) / 100;
     const built = buildCounterPayment(charges, { received, method, momoReference, reason, note });
     const whoProblem = !isOwner && (!name.trim() || !validatePhoneNumber(phone)) ? "Enter the name and phone of the person collecting" : null;
-    const problem = whoProblem ?? built.problem;
+    const problem = whoProblem ?? (!feeValid ? "Enter a valid pickup fee" : built.problem);
 
     const confirm = async () => {
         if (problem || !built.payment) return;
@@ -59,7 +81,8 @@ export const CounterPickupModal = ({ parcel, onClose, onDone }: Props) => {
         try {
             const who = isOwner ? (parcel.receiverName || "") : name.trim();
             const tel = isOwner ? (parcel.recieverPhoneNumber || "") : normalizePhoneNumber(phone.trim());
-            const res = await frontdeskService.markParcelPickedUp(parcel.parcelId, who || undefined, tel || undefined, built.payment);
+            const payment = feeStart || feeInput !== null ? { ...built.payment, pickUpCost: feeValid ? feeNum : 0 } : built.payment;
+            const res = await frontdeskService.markParcelPickedUp(parcel.parcelId, who || undefined, tel || undefined, payment);
             if (res.success) {
                 showToast(due > 0 ? `Picked up · ${formatCurrency(built.payment.amountPaid)} received` : "Parcel marked as picked up", "success");
                 onDone();
@@ -132,6 +155,28 @@ export const CounterPickupModal = ({ parcel, onClose, onDone }: Props) => {
                         {/* Payment */}
                         <div className="space-y-3">
                             <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Payment</p>
+                            {feeStart && (
+                                <div className="flex items-end gap-3 rounded-lg border border-[#ececec] p-3">
+                                    <div className="flex-1 min-w-0">
+                                        <label htmlFor="pickup-fee" className="block text-sm font-medium text-neutral-800">Pickup fee (GHC)</label>
+                                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                                            {feeStart.source === "station"
+                                                ? `Station pickup charge (${formatCurrency(feeStart.fee)}). Change it, or set 0 to waive.`
+                                                : "Recorded on this parcel. You can change it."}
+                                        </p>
+                                    </div>
+                                    <Input
+                                        id="pickup-fee"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={feeText}
+                                        onChange={(e) => setFeeInput(e.target.value)}
+                                        className={`w-28 tabular-nums ${feeValid ? "border-[#d1d1d1]" : "border-red-400"}`}
+                                    />
+                                </div>
+                            )}
                             {charges.length === 0 ? (
                                 <p className="text-sm text-neutral-600 bg-gray-50 border border-[#f0f0f0] rounded-lg p-3">Nothing to pay on this parcel.</p>
                             ) : (

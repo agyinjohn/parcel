@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, Search, Loader, X, Crosshair, AlertTriangle } from "lucide-react";
 import { Button } from "./ui/button";
 import { ACCRA_CENTER, loadGoogleMaps, onGoogleMapsAuthFailure } from "../utils/googleMaps";
+import { searchPlaces, placeDetails, newSessionToken, type PlaceSuggestion } from "../utils/placeSearch";
 
 /** Where a parcel is going. Sent to the backend as receiverLatitude / receiverLongitude etc. */
 export interface DeliveryLocation {
@@ -55,12 +56,6 @@ export const locationToUpdate = (loc: DeliveryLocation | null): Required<ParcelL
 export const sameLocation = (a: DeliveryLocation | null, b: DeliveryLocation | null) =>
     (!a && !b) || (!!a && !!b && a.lat === b.lat && a.lng === b.lng && a.name === b.name);
 
-interface Prediction {
-    place_id: string;
-    description: string;
-    structured_formatting?: { main_text: string; secondary_text?: string };
-}
-
 interface Props {
     value: DeliveryLocation | null;
     onChange: (loc: DeliveryLocation | null) => void;
@@ -81,7 +76,8 @@ export const DeliveryLocationPicker = ({ value, onChange, near = ACCRA_CENTER, o
     const [ready, setReady] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [query, setQuery] = useState("");
-    const [predictions, setPredictions] = useState<Prediction[]>([]);
+    const [predictions, setPredictions] = useState<PlaceSuggestion[]>([]);
+    const [searchError, setSearchError] = useState<string | null>(null);
     const [searching, setSearching] = useState(false);
     const [open, setOpen] = useState(false);
     const [mapOpen, setMapOpen] = useState(false);
@@ -94,10 +90,12 @@ export const DeliveryLocationPicker = ({ value, onChange, near = ACCRA_CENTER, o
             .then(() => {
                 if (cancelled) return;
                 const g = (window as any).google;
-                services.current.autocomplete = new g.maps.places.AutocompleteService();
-                services.current.places = new g.maps.places.PlacesService(document.createElement("div"));
+                // Legacy PlacesService is only used to name map pins (nearbySearch); the geocoder covers it otherwise.
+                if (typeof g.maps.places?.PlacesService === "function") {
+                    services.current.places = new g.maps.places.PlacesService(document.createElement("div"));
+                }
                 services.current.geocoder = new g.maps.Geocoder();
-                services.current.token = new g.maps.places.AutocompleteSessionToken();
+                services.current.token = newSessionToken(g);
                 setReady(true);
                 onAvailabilityChange?.(true);
             })
@@ -119,48 +117,35 @@ export const DeliveryLocationPicker = ({ value, onChange, near = ACCRA_CENTER, o
 
     // Suggestions, debounced.
     useEffect(() => {
-        if (!ready || !query.trim()) { setPredictions([]); return; }
+        if (!ready || !query.trim()) { setPredictions([]); setSearchError(null); return; }
         setSearching(true);
+        let stale = false;
         const id = window.setTimeout(() => {
-            services.current.autocomplete.getPlacePredictions(
-                {
-                    input: query.trim(),
-                    componentRestrictions: { country: "gh" },
-                    locationBias: { center: near, radius: BIAS_RADIUS_M },
-                    sessionToken: services.current.token,
-                },
-                (results: Prediction[] | null) => {
-                    setPredictions(results ?? []);
-                    setSearching(false);
-                }
-            );
+            searchPlaces((window as any).google, query.trim(), near, { radius: BIAS_RADIUS_M, token: services.current.token })
+                .then((items) => { if (!stale) { setPredictions(items); setSearchError(null); } })
+                .catch((e: Error) => { if (!stale) { setPredictions([]); setSearchError(e.message); } })
+                .finally(() => { if (!stale) setSearching(false); });
         }, 250);
-        return () => window.clearTimeout(id);
+        return () => { stale = true; window.clearTimeout(id); };
     }, [query, ready, near]);
 
-    const choosePrediction = (p: Prediction) => {
+    const choosePrediction = (p: PlaceSuggestion) => {
         setOpen(false);
         setSearching(true);
-        services.current.places.getDetails(
-            { placeId: p.place_id, fields: ["geometry", "name", "formatted_address"], sessionToken: services.current.token },
-            (place: any, status: string) => {
-                setSearching(false);
-                // A new session per selection, as Google bills per session.
-                services.current.token = new (window as any).google.maps.places.AutocompleteSessionToken();
-                const loc = place?.geometry?.location;
-                if (status !== "OK" || !loc) return;
-                onChange({
-                    lat: loc.lat(),
-                    lng: loc.lng(),
-                    name: place.name || p.structured_formatting?.main_text || p.description,
-                    address: place.formatted_address || p.description,
-                    placeId: p.place_id,
-                    source: "SEARCH",
-                });
+        const g = (window as any).google;
+        placeDetails(g, p, services.current.token)
+            .then((place) => {
+                onChange({ ...place, placeId: p.placeId, source: "SEARCH" });
                 setQuery("");
                 setPredictions([]);
-            }
-        );
+                setSearchError(null);
+            })
+            .catch((e: Error) => setSearchError(e.message))
+            .finally(() => {
+                setSearching(false);
+                // A new session per selection, as Google bills per session.
+                services.current.token = newSessionToken(g);
+            });
     };
 
     if (loadError) {
@@ -228,7 +213,7 @@ export const DeliveryLocationPicker = ({ value, onChange, near = ACCRA_CENTER, o
                         <ul className="absolute z-30 mt-1 w-full rounded-lg border border-[#d1d1d1] bg-white shadow-lg max-h-64 overflow-auto" role="listbox">
                             {predictions.map((p) => (
                                 <li
-                                    key={p.place_id}
+                                    key={p.placeId}
                                     role="option"
                                     aria-selected={false}
                                     onMouseDown={(e) => { e.preventDefault(); choosePrediction(p); }}
@@ -236,16 +221,19 @@ export const DeliveryLocationPicker = ({ value, onChange, near = ACCRA_CENTER, o
                                 >
                                     <MapPin className="w-4 h-4 mt-0.5 text-gray-400 shrink-0" />
                                     <span className="min-w-0">
-                                        <span className="block text-sm text-neutral-800">{p.structured_formatting?.main_text ?? p.description}</span>
-                                        {p.structured_formatting?.secondary_text && (
-                                            <span className="block text-xs text-[#9a9a9a] truncate">{p.structured_formatting.secondary_text}</span>
-                                        )}
+                                        <span className="block text-sm text-neutral-800">{p.main || p.description}</span>
+                                        {p.secondary && <span className="block text-xs text-[#9a9a9a] truncate">{p.secondary}</span>}
                                     </span>
                                 </li>
                             ))}
                         </ul>
                     )}
-                    {open && !searching && query.trim().length >= 3 && predictions.length === 0 && ready && (
+                    {open && !searching && searchError && ready && (
+                        <div role="alert" className="absolute z-30 mt-1 w-full rounded-lg border border-amber-200 bg-amber-50 shadow-lg px-3 py-2 text-xs text-amber-900">
+                            {searchError}
+                        </div>
+                    )}
+                    {open && !searching && !searchError && query.trim().length >= 3 && predictions.length === 0 && ready && (
                         <div className="absolute z-30 mt-1 w-full rounded-lg border border-[#d1d1d1] bg-white shadow-lg px-3 py-2 text-xs text-[#5d5d5d]">
                             No places found. Try a nearby landmark, or pin it on the map.
                         </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { counterCharges, sumCharges, buildCounterPayment, cashUpTotals, type CounterPaymentInput } from "./counterPickup";
+import { counterCharges, sumCharges, buildCounterPayment, cashUpTotals, initialPickupFee, type CounterPaymentInput } from "./counterPickup";
 
 const base: CounterPaymentInput = { received: "", method: "", momoReference: "", reason: "", note: "" };
 
@@ -11,6 +11,15 @@ describe("counterCharges", () => {
     });
     it("skips zero and non-POD item value", () => {
         expect(counterCharges({ inboundCost: 15, storageCost: 0, itemCost: 300, pod: false })).toEqual([{ key: "inbound", label: "Inbound", amount: 15 }]);
+    });
+});
+
+describe("initialPickupFee", () => {
+    it("prefers the parcel's own fee, then the station charge, else none", () => {
+        expect(initialPickupFee({ pickUpCost: 12 }, { pickupChargeEnabled: true, pickupChargeAmount: 10 })).toEqual({ fee: 12, source: "parcel" });
+        expect(initialPickupFee({ pickUpCost: 0 }, { pickupChargeEnabled: true, pickupChargeAmount: 10 })).toEqual({ fee: 10, source: "station" });
+        expect(initialPickupFee({}, { pickupChargeEnabled: false, pickupChargeAmount: 10 })).toBeNull();
+        expect(initialPickupFee({}, null)).toBeNull();
     });
 });
 

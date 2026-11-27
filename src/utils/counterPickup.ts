@@ -43,6 +43,21 @@ export const counterCharges = (p: ParcelCosts): ChargeLine[] =>
         { key: "pod", label: "Item value (POD, for the sender)", amount: p.pod ? money(p.itemCost) : 0 },
     ] as ChargeLine[]).filter((l) => l.amount > 0);
 
+/**
+ * The pickup fee to start from: the parcel's own fee if it has one, otherwise the station's
+ * pickup charge when the station has it switched on. `null` means no pickup fee applies, so
+ * the field isn't shown.
+ */
+export const initialPickupFee = (
+    parcel: { pickUpCost?: number | null },
+    station?: { pickupChargeEnabled?: boolean | null; pickupChargeAmount?: number | null } | null,
+): { fee: number; source: "parcel" | "station" } | null => {
+    const own = money(parcel.pickUpCost);
+    if (own > 0) return { fee: own, source: "parcel" };
+    if (station?.pickupChargeEnabled) return { fee: money(station.pickupChargeAmount), source: "station" };
+    return null;
+};
+
 export const sumCharges = (lines: ChargeLine[]) => round2(lines.reduce((s, l) => s + l.amount, 0));
 
 export interface CounterPaymentInput {
@@ -55,6 +70,8 @@ export interface CounterPaymentInput {
 }
 
 export interface CounterPayment {
+    /** Pickup fee charged at the counter (station charge or as edited); stored on the parcel. */
+    pickUpCost?: number;
     amountDue: number;
     amountPaid: number;
     varianceAmount: number;
