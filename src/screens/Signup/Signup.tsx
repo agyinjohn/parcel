@@ -107,6 +107,7 @@ export const Signup = (): JSX.Element => {
             workEmail: form.email.trim().toLowerCase(),
             phoneNumber: normalizePhoneForBackend(form.phone),
             password: form.password,
+            plan,
         });
 
         setSubmitting(false);

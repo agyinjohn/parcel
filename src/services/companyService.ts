@@ -9,6 +9,8 @@ interface CompanyRegistrationRequest {
     workEmail: string;
     phoneNumber: string;
     password: string;
+    /** starter | growth | enterprise */
+    plan?: string;
 }
 
 interface CompanyRegistrationResponse {

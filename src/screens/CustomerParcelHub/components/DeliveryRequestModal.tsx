@@ -152,11 +152,12 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, to
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <button type="button" className="absolute inset-0 bg-black/45" onClick={onClose} aria-label="Close" />
-      <Card className="relative w-full sm:max-w-md border border-slate-200 bg-white shadow-2xl rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto">
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 hidden bg-black/45 sm:block" onClick={onClose} aria-label="Close" />
+      {/* Full screen on phones, a card on bigger screens; the pay bar always stays in view. */}
+      <Card className="relative flex h-[100dvh] w-full flex-col overflow-hidden rounded-none border-0 bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-md sm:rounded-2xl sm:border sm:border-slate-200">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4">
             <div>
               <h3 className="text-base font-bold text-neutral-800">
                 {isScheduled ? "Schedule delivery" : "Request delivery"}
@@ -171,13 +172,14 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, to
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-neutral-800 hover:bg-slate-100"
+              aria-label="Close"
+              className="-mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-neutral-800"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-5 space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
             {isScheduled && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 flex gap-3">
                 <CalendarClock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
@@ -301,26 +303,24 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, to
               </p>
             </div>
 
-            <div className="flex gap-3 pt-1">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11 rounded-xl">
-                Cancel
-              </Button>
+          </div>
+
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-slate-500">{quote ? "Total to pay now" : !hasValidCoords ? "Set the delivery spot" : quoteLoading ? "Getting the price…" : "Price not available"}</p>
+                <p className="text-lg font-extrabold tabular-nums text-neutral-900">{quote ? formatTrackCurrency(quote.total) : "—"}</p>
+              </div>
               <Button
                 type="button"
                 onClick={handlePay}
                 disabled={!hasValidCoords || !hasValidSchedule || !quote || submitting || !!paidNotRecorded}
-                className="flex-1 h-11 rounded-xl bg-[#ea690c] hover:bg-[#d45e0a] text-white"
+                className="h-12 min-w-[9.5rem] rounded-xl bg-[#ea690c] text-base font-semibold text-white hover:bg-[#d45e0a]"
               >
-                {submitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <MapPin className="w-4 h-4 mr-2" />
-                    {quote ? `Pay ${formatTrackCurrency(quote.total)}` : "Pay with Paystack"}
-                  </>
-                )}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><MapPin className="mr-2 h-4 w-4" />{isScheduled ? "Book & pay" : "Pay now"}</>}
               </Button>
             </div>
+            {!hasValidSchedule && hasValidCoords && <p className="mt-1.5 text-xs text-amber-700">Choose the date and time first.</p>}
           </div>
         </CardContent>
       </Card>

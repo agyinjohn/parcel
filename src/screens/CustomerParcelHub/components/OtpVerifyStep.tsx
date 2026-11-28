@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { MnmLogo } from "../../../components/MnmLogo";
+import { Package } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { maskPhone } from "../trackParcelUtils";
@@ -53,7 +53,7 @@ export const OtpVerifyStep = ({
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
       <div className="text-center px-2">
-        <MnmLogo className="h-14 w-14 object-contain rounded-2xl mx-auto mb-4 ring-2 ring-orange-100 shadow-sm" />
+        <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#ea690c] to-[#c2470a] shadow-lg shadow-orange-200"><Package className="h-7 w-7 text-white" /></span>
         <h1 className="text-xl font-bold text-neutral-800">Verify phone</h1>
         <p className="text-slate-600 mt-1.5 text-sm">
           Code sent to <span className="font-semibold text-neutral-800">{maskPhone(phone)}</span>

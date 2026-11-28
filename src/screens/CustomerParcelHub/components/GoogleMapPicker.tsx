@@ -56,7 +56,8 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
       })
       .catch(err => {
         if (!cancelled) {
-          setMapError(err instanceof Error ? err.message : "Could not load Google Maps.");
+          console.warn("Map unavailable:", err);
+          setMapError("The map isn't available right now. Use your current location, and add a landmark below.");
           setLoading(false);
         }
       });
@@ -156,11 +157,11 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
           </div>
         )}
         {mapError ? (
-          <div className="h-56 flex items-center justify-center px-4 text-center text-sm text-red-600">
+          <div className="flex h-24 items-center justify-center px-4 text-center text-xs text-amber-800 bg-amber-50">
             {mapError}
           </div>
         ) : (
-          <div ref={mapContainerRef} className="h-56 w-full" />
+          <div ref={mapContainerRef} className="h-52 w-full sm:h-56" />
         )}
       </div>
 

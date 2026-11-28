@@ -55,6 +55,7 @@ import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { CounterCashUp } from "./screens/CounterCashUp/CounterCashUp";
 import { DriverPayments } from "./screens/DriverPayments/DriverPayments";
 import { PartnerApply } from "./screens/PartnerApply/PartnerApply";
+import { PartnerRequests } from "./screens/Admin/PartnerRequests/PartnerRequests";
 import { PricingReview } from "./screens/Admin/PricingReview/PricingReview";
 import { CashReports } from "./screens/Admin/CashReports/CashReports";
 import { API_V2 } from "./config/api";
@@ -66,7 +67,6 @@ import { DeliveryAccountability } from "./screens/Admin/DeliveryAccountability/D
 import { TenantManagement } from "./screens/Admin/TenantManagement/TenantManagement";
 import { CrossTenantAnalytics } from "./screens/Admin/CrossTenantAnalytics/CrossTenantAnalytics";
 import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
-import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
 import { OutgoingParcels } from "./screens/OutgoingParcels";
 import { IncomingParcels } from "./screens/IncomingParcels";
@@ -114,7 +114,7 @@ export const App = (): JSX.Element => {
                               <Route path="/track" element={<Navigate to="/receive" replace />} />
                               <Route path="/p/:parcelId" element={<ParcelScan />} />
                               <Route path="/scan" element={<ParcelScan />} />
-                              <Route path="/receive" element={<CustomerAuthProvider><CustomerParcelHub /></CustomerAuthProvider>} />
+                              <Route path="/receive" element={<CustomerParcelHub />} />
 
                               {/* ── Partner Portal ── */}
                               <Route path="/partner/apply" element={<PartnerApply />} />
@@ -191,6 +191,7 @@ export const App = (): JSX.Element => {
                               <Route path="/admin/rider-detail" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><RiderDetail /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/financial" element={<Navigate to="/admin/dashboard" replace />} />
                               <Route path="/admin/financial-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><FinancialReports /></AdminLayout></ProtectedRoute>} />
+                              <Route path="/admin/partner-requests" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><PartnerRequests /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/pricing-review" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><PricingReview /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/cash-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><CashReports /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/system-logs" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><SystemLogs /></AdminLayout></ProtectedRoute>} />

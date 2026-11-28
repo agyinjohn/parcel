@@ -1,6 +1,6 @@
 import { Download, MoreVertical, Share, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { MnmLogo } from "../../../components/MnmLogo";
+
 import { usePwaInstall } from "../../../hooks/usePwaInstall";
 
 export const PwaInstallBanner = () => {
@@ -12,13 +12,13 @@ export const PwaInstallBanner = () => {
   return (
     <div className="mb-4 rounded-2xl border border-orange-200 bg-gradient-to-r from-orange-50 to-white p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
       <div className="flex items-start gap-3">
-        <MnmLogo className="h-10 w-10 object-contain rounded-xl shrink-0 ring-2 ring-orange-100 bg-white" />
+        <img src="/parcelflow-icon-192.png" alt="" className="h-10 w-10 shrink-0 rounded-xl shadow-sm" />
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-neutral-900 text-sm">Install M&amp;M Receive</p>
+          <p className="font-semibold text-neutral-900 text-sm">Install ParcelFlow</p>
           <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
             {showIosHint
               ? "Add to your home screen for quick access."
-              : "Open parcels faster from your home screen."}
+              : "Track your parcels from your home screen."}
           </p>
 
           {showIosHint ? (

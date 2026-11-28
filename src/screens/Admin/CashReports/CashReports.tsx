@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Download, Loader, RefreshCw, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { Download, Loader, RefreshCw, AlertTriangle, Lock, Unlock, CheckCircle2, ShieldCheck, Wrench } from "lucide-react";
+import { useToast } from "../../../components/ui/toast";
 import { Button } from "../../../components/ui/button";
 import { useLocation as useLocations } from "../../../contexts/LocationContext";
 import { formatCurrency } from "../../../utils/dataHelpers";
-import adminReports, { podAmountOf, type CashupReportRow, type PayoutReport, type PodOwedRow, type WaitingFeeRow } from "../../../services/adminReportsService";
+import adminReports, { podAmountOf, type CashupReportRow, type DriverPaymentIssue, type DuplicateAssignment, type PayoutReport, type PodOwedRow, type WaitingFeeRow } from "../../../services/adminReportsService";
 import type { Trip } from "../../../services/driverPaymentsService";
 import { cashupSummary, downloadCsv, localDate, sumPayouts, toCsv } from "./reportsMath";
 
-type Tab = "cashups" | "payouts" | "pod" | "waiting" | "missing";
-const TABS: [Tab, string][] = [["cashups", "Counter cash-ups"], ["payouts", "Driver payouts"], ["pod", "POD owed to senders"], ["waiting", "Driver fees waiting"], ["missing", "Missing parcels"]];
+type Tab = "cashups" | "payouts" | "pod" | "waiting" | "missing" | "checks";
+const TABS: [Tab, string][] = [["cashups", "Counter cash-ups"], ["payouts", "Driver payouts"], ["pod", "POD owed to senders"], ["waiting", "Driver fees waiting"], ["missing", "Missing parcels"], ["checks", "Money checks"]];
+const ISSUE_LABEL: Record<string, string> = {
+    PAID_WITHOUT_PAYOUT: "Fee marked paid with no payout",
+    PAYOUT_TOTAL_MISMATCH: "Payout total doesn't match its fees",
+    LINE_ON_TWO_PAYOUTS: "Fee on two payouts",
+    ADVANCE_REPAID_MISMATCH: "Advance repaid amount is wrong",
+};
+const issueLabel = (t: string) => ISSUE_LABEL[t] ?? t.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+/** A duplicate row's assignments, whatever the backend calls them. */
+const dupAssignments = (d: DuplicateAssignment): any[] => d.assignments ?? d.activeAssignments ?? d.holders ?? [];
 const DAY = 24 * 60 * 60 * 1000;
 
 const Tile = ({ label, value, sub, tone = "text-neutral-900" }: { label: string; value: string; sub?: string; tone?: string }) => (
@@ -44,6 +54,17 @@ export const CashReports = (): JSX.Element => {
     const [waiting, setWaiting] = useState<WaitingFeeRow[]>([]);
     const [missing, setMissing] = useState<Trip[]>([]);
     const [openOnly, setOpenOnly] = useState(false);
+    const { showToast } = useToast();
+    const [issues, setIssues] = useState<DriverPaymentIssue[]>([]);
+    const [dups, setDups] = useState<DuplicateAssignment[]>([]);
+    const [busy, setBusy] = useState<string | null>(null);
+    // POD payout
+    const [podPicked, setPodPicked] = useState<Set<string>>(new Set());
+    const [podPaying, setPodPaying] = useState(false);
+    const [podMethod, setPodMethod] = useState<"CASH" | "MOMO">("CASH");
+    const [podRef, setPodRef] = useState("");
+    const [podTo, setPodTo] = useState("");
+    const [podNote, setPodNote] = useState("");
 
     useEffect(() => { if (stations.length === 0) refreshLocations(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
     const stationName = (id?: string, fallback?: string) => fallback || stations.find((s) => s.id === id)?.name || id || "—";
@@ -59,6 +80,13 @@ export const CashReports = (): JSX.Element => {
         if (tab === "pod") adminReports.podOwed(office).then((r) => { if (!stale) setPod([...(r.data ?? [])].sort((a, b) => (a.pickedUpAt ?? 0) - (b.pickedUpAt ?? 0))); done(r.success, r.message); });
         if (tab === "waiting") adminReports.longWaiting(office, days).then((r) => { if (!stale) setWaiting([...(r.data ?? [])].sort((a, b) => (a.readyAt ?? 0) - (b.readyAt ?? 0))); done(r.success, r.message); });
         if (tab === "missing") adminReports.missingParcels(office, from, to).then((r) => { if (!stale) setMissing([...(r.data ?? [])].sort((a, b) => (b.arrivedAt ?? 0) - (a.arrivedAt ?? 0))); done(r.success, r.message); });
+        if (tab === "checks") Promise.all([adminReports.integrity(office), adminReports.duplicates()]).then(([a, b]) => {
+            if (stale) return;
+            setIssues(a.data ?? []);
+            setDups(b.data ?? []);
+            done(a.success && b.success, a.message || b.message);
+        });
+        if (tab === "pod") setPodPicked(new Set());
         return () => { stale = true; };
     }, [tab, office, from, to, days, version]);
 
@@ -70,6 +98,42 @@ export const CashReports = (): JSX.Element => {
     const missingCount = missing.reduce((s, t) => s + Math.max(0, (t.declaredCount ?? 0) - (t.receivedCount ?? 0)), 0);
     const ageDays = (t?: number) => (t ? Math.floor((Date.now() - t) / DAY) : null);
     const usesDates = tab === "cashups" || tab === "payouts" || tab === "missing";
+    const podKey = (r: PodOwedRow) => r.id ?? r.parcelId;
+    const podChosen = pod.filter((r) => podPicked.has(podKey(r)));
+    const podChosenTotal = podChosen.reduce((s, r) => s + podAmountOf(r), 0);
+    const payPod = async () => {
+        if (!podChosen.length || busy) return;
+        if (podMethod === "MOMO" && !podRef.trim()) { showToast("Enter the MoMo transaction ID", "error"); return; }
+        setBusy("pod");
+        const r = await adminReports.payPod({
+            collectionIds: podChosen.map((x) => x.id ?? x.parcelId), paymentMethod: podMethod,
+            ...(podMethod === "MOMO" ? { momoReference: podRef.trim() } : {}),
+            ...(podTo.trim() ? { paidTo: podTo.trim() } : {}), ...(podNote.trim() ? { note: podNote.trim() } : {}),
+        });
+        setBusy(null);
+        if (r.success) {
+            showToast(`Recorded ${money(podChosenTotal)} paid to ${podTo.trim() || "the sender"}`, "success");
+            setPodPaying(false); setPodRef(""); setPodTo(""); setPodNote(""); setVersion((v) => v + 1);
+        } else {
+            showToast(r.message || "Couldn't record it", "error");
+            if (r.status === 409) setVersion((v) => v + 1);
+        }
+    };
+    const runCheck = async () => {
+        setBusy("check");
+        const r = await adminReports.runIntegrity();
+        setBusy(null);
+        if (r.success) { setIssues(r.data ?? []); showToast(r.data?.length ? `${r.data.length} problem${r.data.length === 1 ? "" : "s"} found` : "All driver money checks passed", r.data?.length ? "error" : "success"); }
+        else showToast(r.message || "Couldn't run the check", "error");
+    };
+    const fixDups = async () => {
+        if (!window.confirm(`Keep each parcel on its newest assignment and take it off the others (${dups.length} parcel${dups.length === 1 ? "" : "s"})? Check with the riders first if you're unsure who has the parcel.`)) return;
+        setBusy("fix");
+        const r = await adminReports.fixDuplicates();
+        setBusy(null);
+        if (r.success) { showToast("Duplicate assignments removed", "success"); setVersion((v) => v + 1); }
+        else showToast(r.message || "Couldn't fix them", "error");
+    };
 
     const exportCsv = () => {
         const stamp = `${office ? stationName(office).replace(/\s+/g, "-") : "all-stations"}-${usesDates ? `${from}_to_${to}` : localDate(Date.now())}`;
@@ -128,7 +192,7 @@ export const CashReports = (): JSX.Element => {
                 )}
                 <div className="ml-auto flex gap-2">
                     <Button variant="outline" size="sm" className="border-[#d1d1d1]" onClick={() => setVersion((v) => v + 1)} aria-label="Refresh"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></Button>
-                    <Button size="sm" className="bg-[#ea690c] text-white hover:bg-[#d45d0a]" onClick={exportCsv} disabled={loading || !!error}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>
+                    {tab !== "checks" && <Button size="sm" className="bg-[#ea690c] text-white hover:bg-[#d45d0a]" onClick={exportCsv} disabled={loading || !!error}><Download className="mr-1.5 h-4 w-4" />Export CSV</Button>}
                 </div>
             </div>
 
@@ -202,10 +266,13 @@ export const CashReports = (): JSX.Element => {
                     <Tile label="Oldest" value={pod[0]?.pickedUpAt ? `${ageDays(pod[0].pickedUpAt)} days` : "—"} sub={pod[0]?.parcelId} tone={(ageDays(pod[0]?.pickedUpAt) ?? 0) > 7 ? "text-red-600" : "text-neutral-900"} />
                 </div>
                 <ReportTable loading={loading}>
-                    <thead><tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-[#6b7280]"><Th>Collected</Th><Th>Station</Th><Th>Parcel</Th><Th>Receiver</Th><Th>Paid by</Th><Th right>Item value owed</Th></tr></thead>
+                    <thead><tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-[#6b7280]">
+                        <th className="w-10 px-4 py-2.5"><input type="checkbox" aria-label="Select all" className="h-4 w-4 accent-[#ea690c]" checked={pod.length > 0 && podChosen.length === pod.length} onChange={(e) => setPodPicked(e.target.checked ? new Set(pod.map(podKey)) : new Set())} /></th>
+                        <Th>Collected</Th><Th>Station</Th><Th>Parcel</Th><Th>Receiver</Th><Th>Paid by</Th><Th right>Item value owed</Th></tr></thead>
                     <tbody>
                         {pod.length === 0 && !loading ? empty("Nothing owed: every POD item value collected has been paid on.") : pod.map((r) => (
-                            <tr key={r.id ?? r.parcelId} className="border-t border-[#f3f4f6]">
+                            <tr key={r.id ?? r.parcelId} className={`border-t border-[#f3f4f6] ${podPicked.has(podKey(r)) ? "bg-orange-50/50" : ""}`}>
+                                <td className="px-4 py-2.5"><input type="checkbox" aria-label={`Select ${r.parcelId}`} className="h-4 w-4 accent-[#ea690c]" checked={podPicked.has(podKey(r))} onChange={(e) => setPodPicked((set) => { const n = new Set(set); if (e.target.checked) n.add(podKey(r)); else n.delete(podKey(r)); return n; })} /></td>
                                 <Td cls="whitespace-nowrap">{r.pickedUpAt ? new Date(r.pickedUpAt).toLocaleDateString() : r.businessDate}<span className="block text-[11px] text-[#9a9a9a]">{ageDays(r.pickedUpAt) ?? ""} days ago</span></Td>
                                 <Td>{stationName(r.officeId)}</Td><Td cls="font-mono text-xs font-semibold">{r.parcelId}</Td><Td>{r.receiverName}</Td>
                                 <Td>{r.paymentMethod === "MOMO" ? "MoMo" : r.paymentMethod === "CASH" ? "Cash" : "—"}</Td><Td right cls="font-semibold">{money(podAmountOf(r))}</Td>
@@ -213,7 +280,30 @@ export const CashReports = (): JSX.Element => {
                         ))}
                     </tbody>
                 </ReportTable>
-                <p className="text-xs text-[#6b7280]">The sender or vendor is paid outside the app for now; once they're paid, the backend marks the item value as paid out and it drops off this list.</p>
+                {podChosen.length > 0 && (
+                    <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50/50 p-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <p className="flex-1 text-sm font-semibold text-neutral-800">{podChosen.length} selected · {money(podChosenTotal)} to pay to the sender</p>
+                            {!podPaying && <Button size="sm" className="bg-[#ea690c] text-white hover:bg-[#d45d0a]" onClick={() => setPodPaying(true)}>Mark as paid to sender…</Button>}
+                        </div>
+                        {podPaying && (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                <label className="text-xs font-medium text-neutral-700">Paid by
+                                    <select value={podMethod} onChange={(e) => setPodMethod(e.target.value as "CASH" | "MOMO")} className="mt-1 block h-9 w-full rounded-lg border border-[#d1d1d1] bg-white px-2 text-sm">
+                                        <option value="CASH">Cash (comes out of that day's counter cash)</option><option value="MOMO">Mobile money</option>
+                                    </select></label>
+                                {podMethod === "MOMO" && <label className="text-xs font-medium text-neutral-700">MoMo transaction ID<input value={podRef} onChange={(e) => setPodRef(e.target.value)} className="mt-1 block h-9 w-full rounded-lg border border-[#d1d1d1] bg-white px-2 text-sm" /></label>}
+                                <label className="text-xs font-medium text-neutral-700">Paid to<input value={podTo} onChange={(e) => setPodTo(e.target.value)} placeholder="Sender or vendor name" className="mt-1 block h-9 w-full rounded-lg border border-[#d1d1d1] bg-white px-2 text-sm" /></label>
+                                <label className="text-xs font-medium text-neutral-700">Note<input value={podNote} onChange={(e) => setPodNote(e.target.value)} placeholder="Optional" className="mt-1 block h-9 w-full rounded-lg border border-[#d1d1d1] bg-white px-2 text-sm" /></label>
+                                <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
+                                    <Button variant="outline" size="sm" onClick={() => setPodPaying(false)} disabled={busy === "pod"}>Cancel</Button>
+                                    <Button size="sm" className="bg-[#ea690c] text-white hover:bg-[#d45d0a]" onClick={payPod} disabled={busy === "pod"}>{busy === "pod" && <Loader className="mr-1.5 h-4 w-4 animate-spin" />}Record {money(podChosenTotal)} paid</Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                <p className="text-xs text-[#6b7280]">Select the parcels you've paid on to the sender or vendor and record it here; they then drop off this list.</p>
             </>)}
 
             {tab === "waiting" && (<>
@@ -256,6 +346,61 @@ export const CashReports = (): JSX.Element => {
                         ))}
                     </tbody>
                 </ReportTable>
+            </>)}
+            {tab === "checks" && (<>
+                <div className="rounded-xl border border-[#e5e7eb] bg-white">
+                    <div className="flex flex-wrap items-center gap-3 border-b border-[#f0f0f0] px-4 py-3">
+                        <ShieldCheck className="h-5 w-5 text-[#ea690c]" />
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-neutral-800">Driver money checks</p>
+                            <p className="text-xs text-[#6b7280]">Run every night: fees marked paid without a payout, payout totals that don't match their fees, a fee on two payouts, advances repaid wrongly.</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={runCheck} disabled={busy === "check"}>{busy === "check" && <Loader className="mr-1.5 h-4 w-4 animate-spin" />}Run check now</Button>
+                    </div>
+                    {issues.length === 0 ? (
+                        <p className="flex items-center gap-2 px-4 py-6 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />{loading ? "Loading…" : "No problems found. Every driver fee and payout adds up."}</p>
+                    ) : (
+                        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm">
+                            <thead><tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-[#6b7280]"><Th>Problem</Th><Th>Details</Th><Th>Station</Th><Th>Reference</Th><Th>Found</Th></tr></thead>
+                            <tbody>{issues.map((i, k) => (
+                                <tr key={i.id ?? k} className="border-t border-[#f3f4f6] bg-red-50/40">
+                                    <Td cls="font-semibold text-red-700"><span className="inline-flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5" />{issueLabel(i.type)}</span></Td>
+                                    <Td cls="text-xs">{i.detail}</Td><Td>{stationName(i.officeId)}</Td><Td cls="font-mono text-xs">{i.refId}</Td>
+                                    <Td cls="whitespace-nowrap text-xs text-[#6b7280]">{i.checkedAt ? new Date(i.checkedAt).toLocaleString() : ""}</Td>
+                                </tr>
+                            ))}</tbody>
+                        </table></div>
+                    )}
+                </div>
+
+                <div className="rounded-xl border border-[#e5e7eb] bg-white">
+                    <div className="flex flex-wrap items-center gap-3 border-b border-[#f0f0f0] px-4 py-3">
+                        <Wrench className="h-5 w-5 text-[#ea690c]" />
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-neutral-800">Parcels assigned to more than one rider</p>
+                            <p className="text-xs text-[#6b7280]">"Fix" keeps each parcel on its newest assignment and takes it off the others. Check with the riders first if you're unsure who has the parcel.</p>
+                        </div>
+                        <Button size="sm" className="bg-[#ea690c] text-white hover:bg-[#d45d0a]" onClick={fixDups} disabled={busy === "fix" || dups.length === 0}>{busy === "fix" && <Loader className="mr-1.5 h-4 w-4 animate-spin" />}Fix duplicates</Button>
+                    </div>
+                    {dups.length === 0 ? (
+                        <p className="flex items-center gap-2 px-4 py-6 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />{loading ? "Loading…" : "No parcel is on more than one active assignment."}</p>
+                    ) : (
+                        <ul className="divide-y divide-[#f3f4f6]">{dups.map((d, k) => (
+                            <li key={d.parcelId ?? k} className="px-4 py-3 text-sm">
+                                <span className="font-mono text-xs font-semibold">{d.parcelId}</span>
+                                {d.receiverName && <span className="ml-2 text-[#6b7280]">{d.receiverName}</span>}
+                                <ul className="mt-1 space-y-0.5 text-xs text-[#4b5563]">
+                                    {dupAssignments(d).map((a: any, j: number) => (
+                                        <li key={a.assignmentId ?? j}>
+                                            {j === 0 ? <b className="text-green-700">Keeps</b> : <b className="text-red-600">Removed by fix</b>}: {a.riderInfo?.riderName ?? a.riderName ?? a.riderId ?? "rider"} · {a.status ?? ""}{a.assignedAt ? ` · assigned ${new Date(a.assignedAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""} · {a.assignmentId}
+                                        </li>
+                                    ))}
+                                    {dupAssignments(d).length === 0 && <li>{Object.entries(d).filter(([key]) => key !== "parcelId").map(([key, v]) => `${key}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ")}</li>}
+                                </ul>
+                            </li>
+                        ))}</ul>
+                    )}
+                </div>
             </>)}
         </div>
     );

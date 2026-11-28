@@ -48,6 +48,11 @@ describe("toActiveParcel", () => {
         expect(p.podAmount).toBe(300);
         expect(p.toCollect).toBe(330);
     });
+    it("takes off a delivery fee the customer paid online", () => {
+        const p = toActiveParcel({ assignmentId: "a", status: "ASSIGNED" }, { parcelId: "P", deliveryCost: 25, inboundCost: 10, prepaidAmount: 25 });
+        expect(p.charges).toEqual([{ label: "Delivery fee", amount: 25 }, { label: "Inbound", amount: 10 }, { label: "Paid online", amount: -25 }]);
+        expect(p.toCollect).toBe(10);
+    });
     it("falls back to parcelAmount when costs are missing", () => {
         expect(toActiveParcel({ assignmentId: "a", status: "ASSIGNED" }, { parcelId: "P", parcelAmount: 45 }).toCollect).toBe(45);
     });

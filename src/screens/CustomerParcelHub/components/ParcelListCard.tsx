@@ -1,6 +1,4 @@
-import { ChevronRight } from "lucide-react";
-import { Card, CardContent } from "../../../components/ui/card";
-import { ParcelThumbnail } from "./ParcelThumbnail";
+import { ChevronRight, MapPin } from "lucide-react";
 import {
   EnrichedParcel,
   STATUS_STYLES,
@@ -17,80 +15,51 @@ interface Props {
   onOpen: () => void;
 }
 
-export const ParcelListCard = ({
-  parcel,
-  isSelected,
-  showCheckbox,
-  onToggleSelect,
-  onOpen,
-}: Props) => {
+/** One parcel in the list: compact enough for a 320px screen. */
+export const ParcelListCard = ({ parcel, isSelected, showCheckbox, onToggleSelect, onOpen }: Props) => {
   const title = getParcelTitle(parcel);
   const amount = getAmountToPay(parcel);
+  const where = [parcel.companyName, parcel.branchName].filter(Boolean).join(" · ");
 
   return (
-    <Card
-      className={`group overflow-hidden rounded-2xl bg-white transition-all duration-200 ${
-        isSelected
-          ? "border-[#ea690c]/40 shadow-md ring-2 ring-[#ea690c]/15"
-          : "border border-slate-200/90 shadow-sm hover:border-slate-300 hover:shadow-md"
+    <div
+      className={`flex items-stretch overflow-hidden rounded-2xl border bg-white transition-shadow ${
+        isSelected ? "border-[#ea690c]/50 ring-2 ring-[#ea690c]/15" : "border-slate-200 shadow-sm"
       }`}
     >
-      <CardContent className="p-0">
-        <div className="flex items-stretch min-h-[5.5rem]">
-          {showCheckbox && (
-            <label className="flex items-center pl-3.5 pr-1 cursor-pointer shrink-0">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={onToggleSelect}
-                onClick={e => e.stopPropagation()}
-                className="w-4 h-4 accent-[#ea690c] rounded"
-                aria-label={`Select ${title} for delivery`}
-              />
-            </label>
+      {showCheckbox && (
+        <label className="flex shrink-0 cursor-pointer items-start pl-3 pt-4">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="h-5 w-5 rounded accent-[#ea690c]"
+            aria-label={`Select ${title} for delivery`}
+          />
+        </label>
+      )}
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 p-3 pl-3 text-left">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[parcel.displayStatus]}`}>
+            {parcel.statusLabel}
+          </span>
+          <p className="line-clamp-2 break-words font-semibold leading-snug text-neutral-900">{title}</p>
+          <p className="truncate font-mono text-[11px] text-slate-400">{parcel.parcelId}</p>
+          {(where || parcel.shelfName) && (
+            <p className="flex min-w-0 items-center gap-1 text-xs text-slate-500">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span className="truncate">{[where, parcel.shelfName && `Shelf ${parcel.shelfName}`].filter(Boolean).join(" · ")}</span>
+            </p>
           )}
-
-          <button
-            type="button"
-            onClick={onOpen}
-            className="flex flex-1 items-center gap-3.5 py-3.5 pr-3.5 min-w-0 text-left"
-          >
-            <ParcelThumbnail parcel={parcel} size="md" />
-
-            <div className="flex-1 min-w-0 py-0.5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold text-neutral-900 leading-snug line-clamp-2 pr-1">{title}</p>
-                <span
-                  className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_STYLES[parcel.displayStatus]}`}
-                >
-                  {parcel.statusLabel}
-                </span>
-              </div>
-
-              <p className="text-[11px] font-mono text-slate-400 mt-1 truncate">{parcel.parcelId}</p>
-
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-xs text-slate-500">
-                {parcel.shelfName && (
-                  <span className="inline-flex items-center rounded-md bg-slate-50 px-1.5 py-0.5 text-slate-600">
-                    Shelf {parcel.shelfName}
-                  </span>
-                )}
-                {parcel.branchName && !parcel.shelfName && (
-                  <span className="truncate max-w-[140px]">{parcel.branchName}</span>
-                )}
-                {amount != null && (
-                  <span className="font-semibold text-[#ea690c]">{formatTrackCurrency(amount)}</span>
-                )}
-                {parcel.pod && (
-                  <span className="text-[10px] font-medium text-orange-600/90">POD</span>
-                )}
-              </div>
-            </div>
-
-            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#ea690c] shrink-0 self-center transition-colors" />
-          </button>
+          {amount != null && amount > 0 && (
+            <p className="text-sm font-semibold text-[#ea690c]">
+              {formatTrackCurrency(amount)} <span className="text-xs font-normal text-slate-500">to pay{parcel.pod ? " (incl. item value)" : ""}</span>
+            </p>
+          )}
         </div>
-      </CardContent>
-    </Card>
+        <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />
+      </button>
+    </div>
   );
 };

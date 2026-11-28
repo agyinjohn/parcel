@@ -17,6 +17,8 @@ interface RiderStatusResponse {
 }
 
 interface RiderParcelResponse {
+    itemCost?: number;
+    prepaidAmount?: number;
     parcelId: string;
     parcelDescription?: string;
     inboundCost?: number;
@@ -214,6 +216,9 @@ class RiderService {
                     shelfId: parcelItem.shelfId,
                     homeDelivery: parcelItem.homeDelivery,
                     pod: parcelItem.POD || parcelItem.pod,
+                    itemCost: parcelItem.itemCost ?? parcelItem.ItemCost,
+                    // Paid online with the customer's delivery booking: the rider must not collect it again.
+                    prepaidAmount: parcelItem.prepaidAmount ?? parcelItem.deliveryPrepaidAmount ?? 0,
                     delivered: parcelItem.delivered || parcelItem.payed || false,
                     cancelled: parcelItem.cancelled || false,
                     returned: parcelItem.returned || false,

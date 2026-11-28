@@ -108,9 +108,22 @@ export const registerVendor = (on: On, { parcels, offices, page, serialize }: Ct
     on("put", /^\/api-vendor\/parcels\/[^/]+$/, () => { throw { status: 404, message: "No static resource api-vendor/parcels." }; });
 
     // Public "become a partner" request (proposed).
-    const applications: any[] = [];
+    const applications: any[] = [
+        { id: "pa-1", businessName: "Ama Fabrics", contactName: "Ama Kusi", phoneNumber: "+233245551212", area: "Osu", parcelsPerWeek: 30, message: "We sell fabric on Instagram and ship across Accra.", status: "NEW", createdAt: Date.now() - 2 * DAY },
+        { id: "pa-2", businessName: "Tech Hub Gadgets", contactName: "Kojo Mensah", phoneNumber: "+233205553434", email: "kojo@techhub.example", area: "Kumasi", parcelsPerWeek: 100, status: "CONTACTED", adminNote: "Called Tuesday, wants Kumasi Adum", handledByName: "Abena Owusu", handledAt: Date.now() - DAY, createdAt: Date.now() - 4 * DAY },
+    ];
+    on("get", /^\/api-admin\/partner-applications$/, ({ params }) => applications.filter((a) => !params.get("status") || a.status === params.get("status")));
+    on("put", /^\/api-admin\/partner-applications\/([^/]+)$/, ({ match, body }) => {
+        const a = applications.find((x) => x.id === match[1]);
+        if (!a) throw { status: 404, message: "Request not found" };
+        if (!["CONTACTED", "APPROVED", "REJECTED"].includes(body?.status)) throw { status: 400, message: "Invalid status" };
+        if (body.status === "APPROVED" && body.createVendor && !(body.officeIds ?? []).length) throw { status: 400, message: "Choose at least one station" };
+        Object.assign(a, { status: body.status, adminNote: body.note ?? a.adminNote, handledByName: "Abena Owusu", handledAt: Date.now(), ...(body.status === "APPROVED" && body.createVendor ? { vendorUserId: `vendor-${a.id}` } : {}) });
+        return a;
+    });
     on("post", /^\/api-vendor\/applications$/, ({ body }) => {
         if (!body?.businessName || !body?.contactName || !body?.phoneNumber || !body?.area) throw { status: 400, message: "Business name, your name, phone and area are required" };
+        if (body.parcelsPerWeek != null && !Number.isInteger(body.parcelsPerWeek)) throw { status: 400, message: "parcelsPerWeek must be a number" };
         const a = { id: `pa-${applications.length + 1}`, ...body, status: "NEW", createdAt: Date.now() };
         applications.push(a);
         return a;

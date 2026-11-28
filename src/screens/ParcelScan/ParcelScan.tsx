@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { BrandMark } from "../../components/BrandMark";
 import { Loader, PackageIcon, CheckCircleIcon, XCircleIcon, AlertCircleIcon, ArrowLeftIcon, MapPinIcon, PhoneIcon, ClockIcon } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -257,11 +258,7 @@ export const ParcelScan = (): JSX.Element => {
                         <ArrowLeftIcon className="w-5 h-5" />
                     </button>
                 )}
-                <img src="/logo-1.png" alt="M&M" className="h-8 w-8 object-contain rounded" />
-                <div>
-                    <p className="text-sm font-bold text-[#ea690c] leading-tight">Mealex & Mailex</p>
-                    <p className="text-[10px] text-gray-500">Parcel Tracking</p>
-                </div>
+                <BrandMark size="sm" />
             </div>
 
             <div className="max-w-lg mx-auto px-4 py-6 space-y-4">

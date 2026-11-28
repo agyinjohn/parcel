@@ -44,6 +44,15 @@ export const buildVendorPayload = (form: SendParcelForm): VendorParcelRequest =>
         deliveryFee: pod && deliveryFee > 0 ? deliveryFee : undefined,
         itemCost: pod && itemCost > 0 ? itemCost : undefined,
         pod,
+        POD: pod,
+    // Pinned drop-off point (optional).
+    ...(form.pin ? {
+      receiverLatitude: form.pin.lat,
+      receiverLongitude: form.pin.lng,
+      receiverLocationName: form.pin.name,
+      receiverPlaceId: form.pin.placeId,
+      receiverLocationSource: form.pin.source,
+    } : {}),
     };
 };
 

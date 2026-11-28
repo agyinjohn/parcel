@@ -192,6 +192,8 @@ export const DeliveryPricingPanel = () => {
                     <section className="grid grid-cols-2 gap-3 rounded-xl border border-[#e3e3e3] p-4 text-xs font-medium text-[#6b7280]">
                         <label>Fragile handling (GHC)<Input type="number" min="0" step="0.5" value={t.fragileFee} onChange={(e) => set("fragileFee", numOr(e.target.value))} className={cn(inputCls, "mt-1")} /></label>
                         <label>Round the total up to (GHC)<Input type="number" min="0" step="0.5" value={t.roundTo} onChange={(e) => set("roundTo", numOr(e.target.value))} className={cn(inputCls, "mt-1")} /></label>
+                        <label className="col-span-2">Each extra parcel in one customer booking (GHC)<Input aria-label="Extra parcel fee" type="number" min="0" step="0.5" value={t.extraParcelFee ?? 0} onChange={(e) => set("extraParcelFee", numOr(e.target.value))} className={cn(inputCls, "mt-1 max-w-[12rem]")} />
+                            <span className="mt-1 block font-normal text-[#9a9a9a]">When a customer books delivery for several parcels at once, the trip costs the dearest parcel's price plus this for each other parcel.</span></label>
                     </section>
                 </div>
 

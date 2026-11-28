@@ -36,6 +36,8 @@ export const registerCustomer = (on: On, { parcels, offices, serialize, quote }:
         pick((p) => !p.delivered && !p.pickedUp && !p.parcelAssigned && !p.homeDelivery, used),
     ].filter(Boolean);
     demo.forEach((p) => { p.recieverPhoneNumber = DEMO_CUSTOMER_PHONE; p.receiverName = "Akosua Boateng"; });
+    // One of them is from another company and station.
+    if (demo[1] && offices[2]) demo[1].officeId = offices[2].id;
     // The last one hasn't reached the station yet.
     const transit = demo[3];
     if (transit) { transit.shelfName = undefined; transit.shelfId = undefined; transit.hasArrivedAtOffice = false; }
@@ -45,8 +47,17 @@ export const registerCustomer = (on: On, { parcels, offices, serialize, quote }:
         const o = officeOf(p.officeId);
         const { callerName, callerPhoneNumber, callCenterRemark, callOutCome, driverPhoneNumber, companyId, notes, ...rest } = serialize(p) as any;
         void callerName; void callerPhoneNumber; void callCenterRemark; void callOutCome; void driverPhoneNumber; void companyId; void notes;
+        // The portal serves every company: sample parcels come from two of them.
+        const companyName = o.id === offices[1]?.id || o.id === offices[2]?.id ? "Swift Couriers" : "M&M Delivery";
         return {
             ...rest,
+            // Same shape as the backend's customer view.
+            riderInfo: p.riderInfo && !p.delivered ? { name: p.riderInfo.riderName, phoneNumber: p.riderInfo.riderPhoneNumber } : null,
+            deliveryBooked: !!p.deliveryBooked || !!p.homeDelivery,
+            deliveryPrepaidAmount: p.deliveryPrepaidAmount ?? 0,
+            scheduledDeliveryDate: p.scheduledDeliveryDate ?? null,
+            scheduledDeliveryTime: p.scheduledDeliveryTime ?? null,
+            companyName,
             officeName: o.name,
             office: { id: o.id, name: o.name, address: o.address, phoneNumber: o.phoneNumber, latitude: o.latitude, longitude: o.longitude, openingHours: "Mon–Sat, 8am–6pm" },
         };
@@ -97,8 +108,14 @@ export const registerCustomer = (on: On, { parcels, offices, serialize, quote }:
     on("post", /^\/api-user\/delivery-requests$/, ({ body }) => {
         const ps = checkRequest(body);
         if (!body?.paystackReference) throw { status: 400, message: "Payment reference missing." };
+        const each = Math.round((Number(body.amountPaid) / ps.length) * 100) / 100;
         ps.forEach((p: any) => {
             p.homeDelivery = true;
+            p.deliveryBooked = true;
+            p.deliveryCost = p.deliveryCost || each;
+            p.deliveryPrepaidAmount = each;
+            p.scheduledDeliveryDate = body.scheduledDate;
+            p.scheduledDeliveryTime = body.scheduledTime;
             p.receiverLatitude = body.latitude;
             p.receiverLongitude = body.longitude;
             p.receiverLocationName = body.address || "Pinned by customer";

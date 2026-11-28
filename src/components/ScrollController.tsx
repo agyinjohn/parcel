@@ -27,7 +27,8 @@ export const ScrollController = () => {
 
     // Hide when page isn't scrollable, and in the rider app, where riders
     // scroll by touch and the buttons would cover the bottom tab bar.
-    if (docHeight < 100 || pathname.startsWith("/rider")) return null;
+    // Also hidden on the public customer and partner pages, and on phones (touch scrolling).
+    if (docHeight < 100 || pathname.startsWith("/rider") || pathname.startsWith("/receive") || pathname === "/partner/apply" || window.innerWidth < 768) return null;
 
     return (
         <div className="fixed bottom-6 right-5 z-50 flex flex-col gap-1.5">

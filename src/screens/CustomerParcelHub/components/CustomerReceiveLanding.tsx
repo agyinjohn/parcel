@@ -1,168 +1,55 @@
-import { Loader2, Search } from "lucide-react";
+import { CheckCircle2, Loader2, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { GhanaPhoneInput } from "../../../components/GhanaPhoneInput";
 import { validatePhoneNumber } from "../../../utils/dataHelpers";
-import type { GoogleCredentialPayload } from "../../../utils/googleAuth";
-import { ReceiveFooter } from "./ReceiveFooter";
-import { CustomerEmailAuthForm, type AuthMode } from "./CustomerEmailAuthForm";
-import { MnmLogo } from "../../../components/MnmLogo";
-
-export type LandingTab = "account" | "find";
+import { BrandWordmark } from "../../../components/BrandMark";
 
 interface Props {
   phone: string;
   loading: boolean;
   error: string;
-  tab: LandingTab;
-  onTabChange: (tab: LandingTab) => void;
-  authMode: AuthMode;
-  onAuthModeChange: (mode: AuthMode) => void;
-  isSignedIn?: boolean;
-  customerName?: string;
-  customerEmail?: string;
-  customerPicture?: string;
-  deliveryAuthPrompt?: boolean;
-  pendingDeliveryCount?: number;
   onPhoneChange: (value: string) => void;
   onSubmit: () => void;
-  onGoogleSuccess: (profile: GoogleCredentialPayload) => void;
-  onAuthSuccess: () => void;
 }
 
-export const CustomerReceiveLanding = ({
-  phone,
-  loading,
-  error,
-  tab,
-  onTabChange,
-  authMode,
-  onAuthModeChange,
-  isSignedIn,
-  customerName,
-  customerEmail,
-  customerPicture,
-  deliveryAuthPrompt,
-  pendingDeliveryCount,
-  onPhoneChange,
-  onSubmit,
-  onGoogleSuccess,
-  onAuthSuccess,
-}: Props) => (
+/** Customer portal home: search by the phone number the parcel was sent to. Works for every company on ParcelFlow. */
+export const CustomerReceiveLanding = ({ phone, loading, error, onPhoneChange, onSubmit }: Props) => (
   <div className="animate-in fade-in duration-300">
-    <div className="flex flex-col items-center gap-3 mb-5">
-      <MnmLogo className="h-14 w-14 object-contain rounded-2xl shadow-md ring-2 ring-orange-100" />
-      <h1 className="text-2xl font-bold text-neutral-900 tracking-tight text-center">
-        Receive your parcels
+    <div className="mb-5 text-center">
+      <h1 className="text-[1.65rem] font-extrabold leading-tight tracking-tight text-neutral-900 sm:text-3xl">
+        Track and receive <br className="sm:hidden" />your parcels
       </h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">
+        For parcels sent through any delivery company on <BrandWordmark className="text-sm" />. Enter the phone number the parcel was sent to.
+      </p>
     </div>
 
-    <section className="bg-white rounded-3xl border border-slate-200/80 shadow-xl shadow-slate-200/50 overflow-hidden">
-      <div className="grid grid-cols-2 border-b border-slate-100 bg-slate-50/80 p-1.5 gap-1">
-        <button
-          type="button"
-          onClick={() => onTabChange("account")}
-          className={`py-2.5 text-sm font-semibold rounded-2xl transition-all ${
-            tab === "account" ? "bg-white text-neutral-900 shadow-sm" : "text-slate-500"
-          }`}
-        >
-          Account
-        </button>
-        <button
-          type="button"
-          onClick={() => onTabChange("find")}
-          className={`py-2.5 text-sm font-semibold rounded-2xl transition-all ${
-            tab === "find" ? "bg-white text-neutral-900 shadow-sm" : "text-slate-500"
-          }`}
-        >
-          Find parcels
-        </button>
-      </div>
+    <form
+      onSubmit={(e) => { e.preventDefault(); if (!loading && validatePhoneNumber(phone)) onSubmit(); }}
+      className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+    >
+      <label htmlFor="track-phone" className="block text-sm font-medium text-neutral-800">Phone number</label>
+      <GhanaPhoneInput
+        id="track-phone"
+        value={phone}
+        onChange={onPhoneChange}
+        disabled={loading}
+        placeholder="24 123 4567"
+        className="rounded-xl border-slate-200 bg-slate-50/60 py-3.5 focus:bg-white"
+      />
+      {error && (
+        <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+      )}
+      <Button type="submit" disabled={loading || !validatePhoneNumber(phone)} className="h-12 w-full rounded-xl bg-[#ea690c] text-base font-semibold text-white hover:bg-[#d45e0a]">
+        {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Searching…</> : <><Search className="mr-2 h-4 w-4" />Find my parcels</>}
+      </Button>
+    </form>
 
-      <div className="p-5">
-        {tab === "account" && (
-          <div className="space-y-4">
-            {deliveryAuthPrompt && pendingDeliveryCount ? (
-              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                Sign in to request delivery for {pendingDeliveryCount} parcel
-                {pendingDeliveryCount !== 1 ? "s" : ""}.
-              </p>
-            ) : null}
-
-            {isSignedIn ? (
-              <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  {customerPicture ? (
-                    <img src={customerPicture} alt="" className="w-10 h-10 rounded-full" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
-                      {(customerName || "U").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-semibold text-neutral-900 truncate">{customerName}</p>
-                    <p className="text-xs text-slate-500 truncate">{customerEmail}</p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onTabChange("find")}
-                  className="w-full h-10 rounded-xl border-emerald-200"
-                >
-                  Find parcels
-                </Button>
-              </div>
-            ) : (
-              <CustomerEmailAuthForm
-                phone={phone}
-                mode={authMode}
-                onModeChange={onAuthModeChange}
-                onSuccess={onAuthSuccess}
-                onGoogleSuccess={onGoogleSuccess}
-              />
-            )}
-          </div>
-        )}
-
-        {tab === "find" && (
-          <div className="space-y-4">
-            <GhanaPhoneInput
-              id="track-phone"
-              value={phone}
-              onChange={onPhoneChange}
-              disabled={loading}
-              className="rounded-xl border-slate-200 bg-slate-50/60 focus:bg-white py-3.5"
-            />
-
-            {error && (
-              <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <Button
-              type="button"
-              onClick={onSubmit}
-              disabled={loading || !validatePhoneNumber(phone)}
-              className="w-full h-11 bg-[#ea690c] hover:bg-[#d45e0a] text-white rounded-xl font-semibold"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Searching…
-                </>
-              ) : (
-                <>
-                  <Search className="w-4 h-4 mr-2" />
-                  Find parcels
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-      </div>
-    </section>
-
-    <ReceiveFooter variant="search" />
+    <ul className="mt-5 space-y-2 px-1 text-sm text-slate-600">
+      {["See which station has your parcel, with directions", "Know exactly what to pay before you go", "Book delivery to your door and pay online"].map((t) => (
+        <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />{t}</li>
+      ))}
+    </ul>
+    <p className="mt-5 px-1 text-xs text-slate-500">Got an SMS from us? Open the link in it to go straight to your parcel.</p>
   </div>
 );
