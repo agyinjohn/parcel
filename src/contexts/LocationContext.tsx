@@ -15,6 +15,8 @@ interface Station {
     /** Default charge for pickup requests at this station (proposed, handoff Part J). */
     pickupChargeEnabled?: boolean | null;
     pickupChargeAmount?: number | null;
+    /** When inbound drivers become payable (handoff M3). */
+    driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL" | null;
 }
 
 interface Location {

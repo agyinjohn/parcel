@@ -22,7 +22,19 @@ To see the exact request and response shapes the frontend expects, run the front
 
 ---
 
-## Status on `backend-test` (checked 23 Nov 2026)
+## Status on `backend-test` (updated 28 Nov 2026)
+
+**Since 23 Nov:**
+- **Parts L and M are in place:** counter payments and cash-up, and driver payments.
+- **Restored:** company sign-up, `search` and `companyId`.
+- **The frontend uses all of these in the test build.**
+
+**Still open:**
+- **A5:** pickup location fields.
+- **Schema name clash:** the `Summary` schema is shared between driver payments and the delivery check.
+- **Production:** the release to `backend-new`.
+
+### Earlier check (23 Nov 2026)
 
 The API description at `https://backend-test.mandmservicescorp.org/shortly/v3/api-docs` was compared with this document. The frontend's test build (`npm run build:test`, which sets `VITE_API_VERSION=2`) uses the new shapes. The production build still uses the current backend's shapes until these changes reach `backend-new`.
 
@@ -121,6 +133,22 @@ Affected assignment endpoints: `GET /api-frontdesk/rider/{riderId}/assignments`,
 ### A4. Optional: coordinates on saved addresses
 
 Staff can save an address with its delivery cost (`POST /api-frontdesk/addresses`). If `Address` also stored `latitude`, `longitude` and `locationName`, picking a saved address could fill the pin automatically. The frontend doesn't use this yet. It is a nice follow-up, not required.
+
+### A5. Pickup location on pickup requests (required)
+
+The **Pickup Request** form now asks for two map pins: where the rider collects the parcel from the sender, and where it's delivered.
+
+- **Delivery pin:** uses the existing Part A fields (`receiverLatitude` and so on).
+- **Pickup pin:** needs new fields, on `Parcel`, `ParcelRequest`, `ParcelUpdateRequest` and `ParcelInfo`, with the same rules as the receiver fields:
+
+| Field | Type |
+|---|---|
+| `pickupLatitude`, `pickupLongitude` | number, nullable |
+| `pickupLocationName` | string |
+| `pickupPlaceId` | string, nullable |
+| `pickupLocationSource` | `SEARCH` or `MAP_PIN` |
+
+Return them on every parcel response, including the rider's assignments, so the rider app can route to the pickup point first.
 
 ---
 
@@ -1232,6 +1260,7 @@ Once A3 is in place, the frontend team should:
 - [ ] M4 Driver balances, statement and summary from the server.
 - [ ] M5–M6 Payouts (with SMS confirmation and reversal), holds and adjustments.
 - [ ] M7 Driver cash payouts in the counter cash-up. M8 reports *(recommended)*.
+- [ ] A5 Pickup location fields (`pickupLatitude`, `pickupLongitude`, `pickupLocationName`, `pickupPlaceId`, `pickupLocationSource`).
 - [ ] H5 Fuel accountability: per-bike km per litre, allowance per assignment, fill-window records (planned vs actual km and litres), rider explanations, manager decisions, summary.
 - [ ] I Fleet maintenance: vehicles, assignments, service plans and schedules, records, defects, documents, costs, GPS odometer.
 

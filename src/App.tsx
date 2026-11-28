@@ -54,6 +54,8 @@ import { AdminReconciliationAnalytics } from "./screens/Admin/AdminReconciliatio
 import { Settings } from "./screens/Settings/Settings";
 import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { CounterCashUp } from "./screens/CounterCashUp/CounterCashUp";
+import { DriverPayments } from "./screens/DriverPayments/DriverPayments";
+import { API_V2 } from "./config/api";
 import { Help } from "./screens/Help/Help";
 import { TenantSettings } from "./screens/Admin/TenantSettings/TenantSettings";
 import { Billing } from "./screens/Admin/Billing/Billing";
@@ -134,7 +136,7 @@ export const App = (): JSX.Element => {
                               <Route path="/parcel/outgoing" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><OutgoingParcels /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/shelf" element={<ProtectedRoute allowedRoles={["MANAGER"]}><ParcelLayout><ShelfManagement /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/pickup" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><PickupRequest /></ParcelLayout></ProtectedRoute>} />
-                              <Route path="/parcel/driver-tracker" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><DriverInboundReconciliation /></ParcelLayout></ProtectedRoute>} />
+                              <Route path="/parcel/driver-tracker" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout>{API_V2 ? <DriverPayments /> : <DriverInboundReconciliation />}</ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/driver-tracker/:phoneKey" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><DriverTrackerDetail /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/assignments" element={<ProtectedRoute allowedRoles={["MANAGER"]}><ParcelLayout><ParcelSelection /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/settings" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><Settings /></ParcelLayout></ProtectedRoute>} />

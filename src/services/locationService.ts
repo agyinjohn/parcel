@@ -19,6 +19,7 @@ interface Office {
     /** Default charge for pickup requests at this station (proposed, handoff Part J). */
     pickupChargeEnabled?: boolean | null;
     pickupChargeAmount?: number | null;
+    driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL" | null;
 }
 
 interface Station extends Office { }
@@ -299,7 +300,7 @@ class LocationService {
      */
     async updateStation(
         stationId: string,
-        data: { name?: string; address?: string; locationId?: string; managerId?: string; pickupChargeEnabled?: boolean; pickupChargeAmount?: number | null }
+        data: { name?: string; address?: string; locationId?: string; managerId?: string; pickupChargeEnabled?: boolean; pickupChargeAmount?: number | null; driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL"; code?: string }
     ): Promise<{ success: boolean; message: string }> {
         try {
             await this.apiClientAdmin.put(`/office/${stationId}`, data);

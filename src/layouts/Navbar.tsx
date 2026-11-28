@@ -6,6 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { useStation } from "../contexts/StationContext";
 import { useTheme } from "../contexts/ThemeContext";
+import { API_V2 } from "../config/api";
 
 interface NavbarProps {
     onMenuClick: () => void;
@@ -22,7 +23,9 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/parcel/outgoing": { title: "Outgoing Parcels", description: "View and manage outgoing parcels" },
     "/parcel/shelf": { title: "Shelves", description: "Manage parcel shelf locations for this office" },
     "/parcel/pickup": { title: "Pickup Request", description: "Request pickup of parcels from one location for delivery to another" },
-    "/parcel/driver-tracker": { title: "Driver Tracker", description: "Track inbound driver reconciliation" },
+    "/parcel/driver-tracker": API_V2
+        ? { title: "Driver Payments", description: "What we owe the drivers who bring parcels in, and what we've paid them" }
+        : { title: "Driver Tracker", description: "Track inbound driver reconciliation" },
     "/parcel/assignments": { title: "Package Assignments", description: "Select parcels to assign to riders" },
     "/parcel/settings": { title: "Settings", description: "Manage branch configuration and account preferences" },
     "/parcel/cash-up": { title: "Counter Cash-up", description: "Payments taken at the counter and the end-of-day count" },

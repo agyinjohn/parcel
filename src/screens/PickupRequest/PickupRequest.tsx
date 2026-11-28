@@ -18,6 +18,7 @@ import authService from "../../services/authService";
 import { useStation } from "../../contexts/StationContext";
 import { useLocation as useLocations } from "../../contexts/LocationContext";
 import frontdeskService, { type ParcelRequest } from "../../services/frontdeskService";
+import { DeliveryLocationPicker, type DeliveryLocation } from "../../components/DeliveryLocationPicker";
 
 export interface PickupRequestFormData {
   pickupAddress: string;
@@ -68,6 +69,11 @@ export const PickupRequest = (): JSX.Element => {
     setForm((f) => (f.pickupCost === undefined || chargeMode === "off" ? { ...f, pickupCost: freshForm().pickupCost } : f));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeMode, stationCharge]);
+  // Map pins for where the rider collects and where the parcel goes. Required when Google Maps works.
+  const [pickupPin, setPickupPin] = useState<DeliveryLocation | null>(null);
+  const [deliveryPin, setDeliveryPin] = useState<DeliveryLocation | null>(null);
+  const [mapAvailable, setMapAvailable] = useState(true);
+  const near = station?.latitude != null && station?.longitude != null ? { lat: station.latitude, lng: station.longitude } : undefined;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -89,6 +95,10 @@ export const PickupRequest = (): JSX.Element => {
       showToast("Pickup address is required", "error");
       return false;
     }
+    if (mapAvailable && !pickupPin) {
+      showToast("Choose the pickup location: search a landmark or pin it on the map", "error");
+      return false;
+    }
     if (!form.pickupContactName?.trim()) {
       showToast("Pickup contact name is required", "error");
       return false;
@@ -103,6 +113,10 @@ export const PickupRequest = (): JSX.Element => {
     }
     if (!form.deliveryAddress?.trim()) {
       showToast("Delivery address is required", "error");
+      return false;
+    }
+    if (mapAvailable && !deliveryPin) {
+      showToast("Choose the delivery location: search a landmark or pin it on the map", "error");
       return false;
     }
     if (!form.recipientName?.trim()) {
@@ -167,6 +181,26 @@ export const PickupRequest = (): JSX.Element => {
         deliveryContactPhoneNumber: form.recipientPhone,
         specialInstructions: form.specialInstructions,
 
+        // Map pins (delivery: Part A fields; pickup: proposed Part A5 fields)
+        ...(deliveryPin
+          ? {
+              receiverLatitude: deliveryPin.lat,
+              receiverLongitude: deliveryPin.lng,
+              receiverLocationName: deliveryPin.name,
+              receiverPlaceId: deliveryPin.placeId,
+              receiverLocationSource: deliveryPin.source,
+            }
+          : {}),
+        ...(pickupPin
+          ? {
+              pickupLatitude: pickupPin.lat,
+              pickupLongitude: pickupPin.lng,
+              pickupLocationName: pickupPin.name,
+              pickupPlaceId: pickupPin.placeId,
+              pickupLocationSource: pickupPin.source,
+            }
+          : {}),
+
         // Costs and value (optional – leave undefined when blank)
         itemCost: form.itemValue,
         pickUpCost: form.pickupCost,
@@ -188,6 +222,8 @@ export const PickupRequest = (): JSX.Element => {
         showToast("Pickup request submitted successfully. A rider will be assigned for collection.", "success");
         setSubmitSuccess(true);
         setForm(freshForm());
+        setPickupPin(null);
+        setDeliveryPin(null);
       } else {
         showToast(response.message || "Failed to submit pickup request", "error");
       }
@@ -201,6 +237,8 @@ export const PickupRequest = (): JSX.Element => {
 
   const handleReset = () => {
     setForm(freshForm());
+    setPickupPin(null);
+    setDeliveryPin(null);
     setSubmitSuccess(false);
   };
 
@@ -228,6 +266,18 @@ export const PickupRequest = (): JSX.Element => {
                       value={form.pickupAddress}
                       onChange={(e) => updateField("pickupAddress", e.target.value)}
                       className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-neutral-700 mb-1">Pickup point on map {mapAvailable && <span className="text-[#e22420]">*</span>}</p>
+                    <DeliveryLocationPicker
+                      value={pickupPin}
+                      near={near}
+                      onChange={(loc) => {
+                        setPickupPin(loc);
+                        if (loc && !form.pickupAddress.trim()) updateField("pickupAddress", loc.address || loc.name);
+                      }}
+                      onAvailabilityChange={setMapAvailable}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -273,6 +323,17 @@ export const PickupRequest = (): JSX.Element => {
                       value={form.deliveryAddress}
                       onChange={(e) => updateField("deliveryAddress", e.target.value)}
                       className="mt-1 border border-[#d1d1d1] h-9 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-neutral-700 mb-1">Delivery point on map {mapAvailable && <span className="text-[#e22420]">*</span>}</p>
+                    <DeliveryLocationPicker
+                      value={deliveryPin}
+                      near={near}
+                      onChange={(loc) => {
+                        setDeliveryPin(loc);
+                        if (loc && !form.deliveryAddress.trim()) updateField("deliveryAddress", loc.address || loc.name);
+                      }}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">

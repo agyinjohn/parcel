@@ -9,10 +9,30 @@ export interface CashUpRecord {
     expectedCash: number;
     countedCash: number;
     expectedMomo: number;
-    varianceAmount: number;
+    /** Backend name for counted − expected. */
+    cashDifference?: number;
+    /** Older name, kept for compatibility. */
+    varianceAmount?: number;
     note?: string;
+    driverCashPayouts?: number;
+    driverCashAdvances?: number;
     closedAt?: number;
     closedByName?: string;
+    /** Corrections added after the day was closed. */
+    adjustments?: Array<{ amount: number; reason: string; at?: number; byName?: string }>;
+}
+
+/** GET /counter-cash-movements: everything through the drawer for a day (handoff L + M7). */
+export interface CashMovements {
+    date: string;
+    closed?: boolean;
+    collections: CounterCollection[];
+    driverCashPayouts: Array<{ id: string; receiptNo?: string; driverName?: string; netAmount: number; paidAt?: number; paidByName?: string }>;
+    driverCashAdvances: Array<{ id: string; driverId?: string; amount: number; reason?: string; createdAt?: number; createdByName?: string }>;
+    totals: {
+        count: number; due: number; received: number; counterCash: number; momo: number; shortOver: number;
+        driverCashPayouts: number; driverCashAdvances: number; expectedCash: number; expectedMomo: number;
+    };
 }
 
 const API_BASE_URL_FRONTDESK = API_ENDPOINTS.FRONTDESK;
@@ -83,6 +103,13 @@ interface ParcelRequest {
     receiverLocationName?: string;
     receiverPlaceId?: string;
     receiverLocationSource?: "SEARCH" | "MAP_PIN";
+
+    // Pinned pickup location for pickup requests (proposed, handoff Part A5).
+    pickupLatitude?: number;
+    pickupLongitude?: number;
+    pickupLocationName?: string;
+    pickupPlaceId?: string;
+    pickupLocationSource?: "SEARCH" | "MAP_PIN";
 }
 
 interface ParcelUpdateRequest {
@@ -572,9 +599,9 @@ class FrontdeskService {
      * Manager: set the pickup-request charge for their own station.
      * Proposed endpoint PUT /api-frontdesk/office/pickup-charge (handoff Part J).
      */
-    async updateStationPickupCharge(enabled: boolean, amount: number | null): Promise<ApiResponse> {
+    async updateStationPickupCharge(enabled: boolean, amount: number | null, driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL"): Promise<ApiResponse> {
         try {
-            await this.apiClient.put('/office/pickup-charge', { pickupChargeEnabled: enabled, pickupChargeAmount: amount });
+            await this.apiClient.put('/office/pickup-charge', { pickupChargeEnabled: enabled, pickupChargeAmount: amount, ...(driverPayPolicy ? { driverPayPolicy } : {}) });
             return { success: true, message: 'Pickup charge saved' };
         } catch (error: any) {
             return { success: false, message: error.response?.data?.message || 'Failed to save the pickup charge.' };
@@ -699,6 +726,29 @@ class FrontdeskService {
      * Endpoint: GET /parcel-assignment
      * Now returns assignments with parcels array
      */
+    /**
+     * Every assignment still out with a rider (ASSIGNED, ACCEPTED, PICKED_UP), all pages.
+     * GET /parcel-assignment filters by status, so finished history isn't downloaded.
+     */
+    async getActiveAssignments(): Promise<ApiResponse & { data?: any[] }> {
+        try {
+            const statuses = ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'];
+            const lists = await Promise.all(statuses.map(async (status) => {
+                const all: any[] = [];
+                for (let page = 0; page < 50; page++) {
+                    const r = await this.apiClient.get<any>(`/parcel-assignment?status=${status}&page=${page}&size=200`);
+                    const content = r.data?.content ?? (Array.isArray(r.data) ? r.data : []);
+                    all.push(...content);
+                    if (r.data?.last !== false || content.length === 0) break;
+                }
+                return all;
+            }));
+            return { success: true, message: 'OK', data: lists.flat() };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load active deliveries.' };
+        }
+    }
+
     async getParcelAssignments(page: number = 0, size: number = 200): Promise<ApiResponse> {
         try {
             const params = new URLSearchParams();
@@ -1081,8 +1131,28 @@ class FrontdeskService {
         }
     }
 
+    /** Counter takings and driver cash out for one day (backend-test). */
+    async getCashMovements(date: string): Promise<ApiResponse & { data?: CashMovements }> {
+        try {
+            const response = await this.apiClient.get<CashMovements>(`/counter-cash-movements?date=${encodeURIComponent(date)}`);
+            return { success: true, message: 'OK', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load the day\'s cash movements.' };
+        }
+    }
+
+    /** Correct a closed day: closed days are never edited, a correction is appended (manager). */
+    async addCashUpCorrection(body: { date: string; amount: number; reason: string }): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post('/counter-cashup/adjustments', body);
+            return { success: true, message: 'Correction saved', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to save the correction.' };
+        }
+    }
+
     /** Close the day's counter cash-up (proposed, handoff Part L). */
-    async submitCashUp(body: { date: string; expectedCash: number; countedCash: number; expectedMomo: number; varianceAmount: number; note?: string }): Promise<ApiResponse> {
+    async submitCashUp(body: { date: string; expectedCash: number; countedCash: number; expectedMomo: number; varianceAmount?: number; note?: string }): Promise<ApiResponse> {
         try {
             const response = await this.apiClient.post('/counter-cashup', body);
             return { success: true, message: response.data?.message || 'Cash-up saved', data: response.data };

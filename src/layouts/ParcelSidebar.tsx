@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { X, InboxIcon, SearchIcon, Layers, Edit, LogOut, ZapIcon, CarIcon, ArrowDownToLine, ArrowUpFromLine, Settings, HelpCircle, Building2, Wallet } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
+import { API_V2 } from "../config/api";
 import { useBranding } from "../contexts/BrandingContext";
 
 interface SidebarProps {
@@ -14,7 +15,7 @@ const navItems = [
     { label: "Parcel Intake", path: "/parcel/intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Incoming Parcels", path: "/parcel/incoming", icon: ArrowDownToLine, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Outgoing Parcels", path: "/parcel/outgoing", icon: ArrowUpFromLine, roles: ["FRONTDESK", "MANAGER"] },
-    { label: "Driver Tracker", path: "/parcel/driver-tracker", icon: CarIcon, roles: ["FRONTDESK", "MANAGER"] },
+    { label: API_V2 ? "Driver Payments" : "Driver Tracker", path: "/parcel/driver-tracker", icon: CarIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Shelf", path: "/parcel/shelf", icon: Layers, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Smart Search", path: "/parcel/smart-search", icon: ZapIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Edit Parcels",  path: "/parcel/edit",         icon: Edit,        roles: ["MANAGER"] },

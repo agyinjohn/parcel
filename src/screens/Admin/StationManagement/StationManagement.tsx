@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Plus, MapPin, X, Loader, Building2, Edit2, Trash2, AlertTriangle, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { API_V2 } from "../../../config/api";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -21,6 +22,7 @@ interface Station {
     createdAt: number;
     pickupChargeEnabled?: boolean | null;
     pickupChargeAmount?: number | null;
+    driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL" | null;
 }
 
 interface Location {
@@ -48,6 +50,7 @@ export const StationManagement = (): JSX.Element => {
     // Pickup-request charge for the station being edited.
     const [pickupEnabled, setPickupEnabled] = useState(false);
     const [pickupAmount, setPickupAmount] = useState("");
+    const [payPolicy, setPayPolicy] = useState<"ON_COLLECTION" | "ON_ARRIVAL">("ON_COLLECTION");
     const [savingStation, setSavingStation] = useState(false);
     const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null);
     const [isCreatingLocation, setIsCreatingLocation] = useState(false);
@@ -242,6 +245,7 @@ export const StationManagement = (): JSX.Element => {
         });
         setPickupEnabled(!!station.pickupChargeEnabled);
         setPickupAmount(station.pickupChargeAmount != null ? String(station.pickupChargeAmount) : "");
+        setPayPolicy(station.driverPayPolicy ?? "ON_COLLECTION");
         setShowEditStationModal(true);
     };
 
@@ -265,6 +269,8 @@ export const StationManagement = (): JSX.Element => {
             address: stationFormData.address.trim(),
             pickupChargeEnabled: pickupEnabled,
             pickupChargeAmount: pickupEnabled ? amount : null,
+            // Updated backend: station code and driver pay policy are editable too.
+            ...(API_V2 ? { code: stationFormData.code.trim(), driverPayPolicy: payPolicy } : {}),
         });
         setSavingStation(false);
         if (!res.success) {
@@ -643,6 +649,15 @@ export const StationManagement = (): JSX.Element => {
                                                         placeholder="e.g. 10"
                                                         className="border border-[#d1d1d1] w-40"
                                                     />
+                                                </div>
+                                            )}
+                                            {API_V2 && (
+                                                <div>
+                                                    <Label htmlFor="edit-pay-policy" className="block text-xs font-medium text-neutral-700 mb-1">Drivers are paid</Label>
+                                                    <select id="edit-pay-policy" value={payPolicy} onChange={(e) => setPayPolicy(e.target.value as "ON_COLLECTION" | "ON_ARRIVAL")} className="h-10 w-full rounded-md border border-[#d1d1d1] px-3 text-sm">
+                                                        <option value="ON_COLLECTION">When the customer has paid</option>
+                                                        <option value="ON_ARRIVAL">As soon as the parcel arrives</option>
+                                                    </select>
                                                 </div>
                                             )}
                                         </div>

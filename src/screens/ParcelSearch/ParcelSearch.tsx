@@ -568,7 +568,6 @@ export const ParcelSearch = (): JSX.Element => {
                                             const newSize = parseInt(e.target.value);
                                             loadParcelsIfNeeded({}, 0, newSize, true);
                                         }}
-                                        defaultValue={200}
                                         className="text-xs border border-[#d1d1d1] rounded px-2 py-1"
                                     >
                                         <option value={200}>200</option>

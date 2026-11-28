@@ -9,6 +9,7 @@ import { Switch } from "../../components/ui/switch";
 import { useStation } from "../../contexts/StationContext";
 import { useLocation as useLocations } from "../../contexts/LocationContext";
 import frontdeskService from "../../services/frontdeskService";
+import { API_V2 } from "../../config/api";
 import {
     AlertCircle, Building2, Clock, ImageIcon, Mail, Paintbrush,
     Phone, Printer, RotateCcw, Save, UploadCloud, Banknote, Loader,
@@ -528,15 +529,19 @@ const ChargesPanel = () => {
     const station = stations.find((st) => st.id === userOfficeId);
     const [enabled, setEnabled] = useState(false);
     const [amount, setAmount] = useState("");
+    const [policy, setPolicy] = useState<"ON_COLLECTION" | "ON_ARRIVAL">("ON_COLLECTION");
     const [saving, setSaving] = useState(false);
+    const savedPolicy = station?.driverPayPolicy ?? "ON_COLLECTION";
 
     useEffect(() => {
         setEnabled(!!station?.pickupChargeEnabled);
         setAmount(station?.pickupChargeAmount != null ? String(station.pickupChargeAmount) : "");
-    }, [station?.pickupChargeEnabled, station?.pickupChargeAmount]);
+        setPolicy(savedPolicy);
+    }, [station?.pickupChargeEnabled, station?.pickupChargeAmount, savedPolicy]);
 
     const dirty = enabled !== !!station?.pickupChargeEnabled
-        || (enabled && amount !== (station?.pickupChargeAmount != null ? String(station.pickupChargeAmount) : ""));
+        || (enabled && amount !== (station?.pickupChargeAmount != null ? String(station.pickupChargeAmount) : ""))
+        || (API_V2 && policy !== savedPolicy);
 
     const save = async () => {
         const value = amount.trim() === "" ? null : Number(amount);
@@ -545,10 +550,10 @@ const ChargesPanel = () => {
             return;
         }
         setSaving(true);
-        const res = await frontdeskService.updateStationPickupCharge(enabled, enabled ? value : null);
+        const res = await frontdeskService.updateStationPickupCharge(enabled, enabled ? value : null, API_V2 ? policy : undefined);
         setSaving(false);
         if (res.success) {
-            showToast(enabled ? `Pickup charge set to GHC ${value!.toFixed(2)}` : "Pickup charge switched off", "success");
+            showToast("Charges saved", "success");
             await refreshLocations();
         } else showToast(res.message, "error");
     };
@@ -581,8 +586,23 @@ const ChargesPanel = () => {
                     />
                 </div>
             )}
+            {API_V2 && (
+                <div className="space-y-2 border-t border-[#ececec] pt-5">
+                    <h2 className="text-base font-semibold text-neutral-900">When are drivers paid?</h2>
+                    <p className="text-sm text-[#5d5d5d]">Drivers who bring parcels in are paid a fee per parcel in Driver Payments.</p>
+                    {([
+                        ["ON_COLLECTION", "When the customer has paid", "A driver's fee becomes payable once the parcel is collected and paid for at the counter, or delivered and reconciled. Recommended."],
+                        ["ON_ARRIVAL", "As soon as the parcel arrives", "Fees can be paid straight after intake, before the customer has paid."],
+                    ] as const).map(([value, label, hint]) => (
+                        <label key={value} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3", policy === value ? "border-[#ea690c] bg-orange-50/50" : "border-[#e3e3e3]")}>
+                            <input type="radio" name="driver-pay-policy" className="mt-1 h-4 w-4 accent-[#ea690c]" checked={policy === value} onChange={() => setPolicy(value)} />
+                            <span><span className="block text-sm font-medium text-neutral-800">{label}</span><span className="block text-xs text-[#9a9a9a] mt-0.5">{hint}</span></span>
+                        </label>
+                    ))}
+                </div>
+            )}
             <Button onClick={save} disabled={!dirty || saving} className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 flex items-center gap-2">
-                {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save charge
+                {saving ? <Loader className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save charges
             </Button>
         </div>
     );
