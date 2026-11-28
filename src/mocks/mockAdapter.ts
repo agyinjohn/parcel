@@ -225,6 +225,7 @@ const COUNTER_COLLECTIONS: any[] = (() => {
             pickedUpAt: Math.min(Date.now() - 5 * 60_000, start.getTime() + i * 47 * 60_000),
             amountDue: due, amountPaid: paid, varianceAmount: paid - due, paymentMethod: methods[i],
             momoReference: methods[i] === "MOMO" ? `44718${25930 + i}` : undefined,
+            podAmount: p.pod ? p.itemCost || 0 : 0, podPaidOut: false,
             varianceReason: paid !== due ? "Customer paid less" : undefined, varianceNote: paid !== due ? "Will bring the rest tomorrow" : undefined,
             recordedByName: "Akosua Boateng",
         };
@@ -241,6 +242,7 @@ on("post", /^\/api-frontdesk\/parcel\/picked-up$/, ({ body }) => {
             collectedByName: body.whoPickedUpName, collectedByPhone: body.whoPickedUpTelephoneNumber, pickedUpAt: Date.now(),
             amountDue: Number(body.amountDue) || 0, amountPaid: Number(body.amountPaid) || 0, varianceAmount: Number(body.varianceAmount) || 0,
             paymentMethod: body.paymentMethod, momoReference: body.momoReference, varianceReason: body.varianceReason, varianceNote: body.varianceNote,
+            podAmount: (body.charges ?? []).find((c: any) => c.key === "pod")?.amount ?? 0, podPaidOut: false,
             recordedByName: "Kofi Mensah",
         });
     }
@@ -289,6 +291,33 @@ on("post", /^\/api-frontdesk\/counter-cashup$/, ({ body }) => {
     };
     return { message: "Cash-up saved" };
 });
+// Admin reports (handoff L4): cash-ups by station and day, POD item values still owed to senders.
+on("get", /^\/api-admin\/counter-cashups$/, ({ params }) => {
+    const from = params.get("from") ?? localDay(Date.now() - 29 * 86_400_000);
+    const to = params.get("to") ?? localDay(Date.now());
+    const days = [...new Set(COUNTER_COLLECTIONS.map((c) => localDay(c.pickedUpAt)))].filter((d) => d >= from && d <= to);
+    // Sample history: a closed day for each other station so the report isn't one row.
+    const extra = OFFICES.filter((o) => o.id !== HOME_OFFICE.id && (!params.get("officeId") || o.id === params.get("officeId"))).slice(0, 3).map((o, i) => {
+        const day = localDay(Date.now() - (i + 1) * 86_400_000);
+        const expected = [420, 310, 655][i];
+        const diff = [0, -10, 5][i];
+        return { officeId: o.id, officeName: o.name, date: day, closed: true, collectionCount: [9, 6, 12][i], expectedCash: expected, countedCash: expected + diff, difference: diff, expectedMomo: [80, 45, 120][i], adjustmentTotal: i === 1 ? 10 : 0, note: i === 1 ? "GHC 10 found in the drawer the next morning" : undefined, closedByName: "Station manager", closedAt: Date.now() - (i + 1) * 86_400_000 + 18 * 3_600_000 };
+    }).filter((r) => r.date >= from && r.date <= to);
+    const home = (!params.get("officeId") || params.get("officeId") === HOME_OFFICE.id) ? days.map((d) => {
+        const m = cashMovements(d);
+        const cu = CASH_UPS[d];
+        return {
+            officeId: HOME_OFFICE.id, officeName: HOME_OFFICE.name, date: d, closed: !!cu, collectionCount: m.totals.count, expectedCash: cu?.expectedCash ?? m.totals.expectedCash,
+            countedCash: cu?.countedCash, difference: cu?.cashDifference, expectedMomo: m.totals.expectedMomo, adjustmentTotal: (cu?.adjustments ?? []).reduce((s: number, a: any) => s + a.amount, 0),
+            note: cu?.note, closedByName: cu?.closedByName, closedAt: cu?.closedAt,
+        };
+    }) : [];
+    return [...home, ...extra];
+});
+on("get", /^\/api-admin\/pod-payouts$/, ({ params }) =>
+    COUNTER_COLLECTIONS.filter((c) => (c.podAmount ?? 0) > 0 && !c.podPaidOut && (!params.get("officeId") || params.get("officeId") === HOME_OFFICE.id))
+        .map((c) => ({ ...c, officeId: HOME_OFFICE.id, businessDate: localDay(c.pickedUpAt) })));
+
 on("post", /^\/api-frontdesk\/counter-cashup\/adjustments$/, ({ body }) => {
     const rec = CASH_UPS[body?.date];
     if (!rec) throw { status: 404, message: "That day isn't closed" };

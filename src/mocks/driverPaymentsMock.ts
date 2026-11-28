@@ -80,8 +80,8 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         if (l.payoutId) return { state: "PAID" };
         if (holds.has(l.id)) return { state: "ON_HOLD", holdReason: holds.get(l.id)!.reason };
         if (p?.returned) return { state: "NOT_PAYABLE" };
-        if (p?.pickedUp) return { state: "READY", readyReason: "PICKED_UP", readyAt: p.updatedAt };
-        if (p?.delivered) return { state: "READY", readyReason: "DELIVERED", readyAt: p.updatedAt };
+        if (p?.pickedUp) return { state: "READY", readyReason: "PICKED_UP", readyAt: p.updatedAt ?? p.createdAt };
+        if (p?.delivered) return { state: "READY", readyReason: "DELIVERED", readyAt: p.updatedAt ?? p.createdAt };
         return { state: "WAITING" };
     };
     const lineOut = (l: any) => {
@@ -129,6 +129,8 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         }
         adjustments.push({ id: "adj-1", driverId: drivers[0]?.id, officeId: ctx.officeId, type: "ADVANCE", amount: 50, reason: "Fuel advance", paymentMethod: "CASH", businessDate: localDay(now() - 3 * DAY), open: true, repaidAmount: 0, createdAt: now() - 3 * DAY, createdByName: "Kofi Mensah" });
     }
+
+    registerDriverReports(on, ctx, { drivers, trips, lines, lineState, tripOut });
 
     // ── Handlers ───────────────────────────────────────────────
     on("get", /^\/api-frontdesk\/driver-payments\/summary$/, () => {
@@ -274,6 +276,39 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         lines.filter((l) => l.payoutId === p.id).forEach((l) => (l.payoutId = undefined));
         return p;
     });
+};
+
+/** Admin reports on driver payments (handoff M8). Registered by registerDriverPayments. */
+const registerDriverReports = (on: On, ctx: Ctx, data: { drivers: any[]; trips: any[]; lines: any[]; lineState: (l: any) => any; tripOut: (t: any) => any }) => {
+    const now = ctx.now ?? Date.now;
+    const inDays = (day?: string, from?: string | null, to?: string | null) => !!day && (!from || day >= from) && (!to || day <= to);
+    on("get", /^\/api-admin\/driver-payouts\/summary$/, ({ params }) => {
+        const list = DRIVER_CASH.payouts.filter((p) => !p.reversed && inDays(p.businessDate, params.get("from"), params.get("to")) && (!params.get("officeId") || p.officeId === params.get("officeId")));
+        const total = (rows: any[], key: Record<string, unknown>) => ({
+            ...key, payouts: rows.length, gross: round2(rows.reduce((s, p) => s + p.grossAmount, 0)), deductions: round2(rows.reduce((s, p) => s + (p.deductions || 0), 0)),
+            bonuses: round2(rows.reduce((s, p) => s + (p.bonuses || 0), 0)), net: round2(rows.reduce((s, p) => s + p.netAmount, 0)),
+            cash: round2(rows.filter((p) => p.paymentMethod === "CASH").reduce((s, p) => s + p.netAmount, 0)), momo: round2(rows.filter((p) => p.paymentMethod === "MOMO").reduce((s, p) => s + p.netAmount, 0)),
+            unconfirmed: rows.filter((p) => !p.confirmed).length,
+        });
+        const offices = [...new Set(list.map((p) => p.officeId))];
+        const drivers = [...new Set(list.map((p) => p.driverId))];
+        return {
+            byStation: offices.map((o) => total(list.filter((p) => p.officeId === o), { officeId: o })),
+            byDriver: drivers.map((d) => { const rows = list.filter((p) => p.driverId === d); return total(rows, { driverId: d, driverName: rows[0]?.driverName, officeId: rows[0]?.officeId }); }),
+        };
+    });
+    on("get", /^\/api-admin\/driver-fee-lines\/long-waiting$/, ({ params }) => {
+        const days = Number(params.get("days")) || 7;
+        return data.lines
+            .map((l) => ({ l, st: data.lineState(l) }))
+            .filter(({ st }) => st.state === "READY" && (st.readyAt ?? now()) < now() - days * DAY)
+            .map(({ l, st }) => {
+                const d = data.drivers.find((x) => x.id === l.driverId);
+                return { id: l.id, driverId: l.driverId, driverName: d?.name, driverPhoneNumber: d?.phoneNumbers?.[0], officeId: ctx.officeId, parcelId: l.parcelId, amount: l.amount, state: "READY", readyAt: st.readyAt, readyReason: st.readyReason, tripId: l.tripId };
+            });
+    });
+    on("get", /^\/api-admin\/driver-trips\/missing-parcels$/, ({ params }) =>
+        data.trips.filter((t) => (t.receivedCount ?? 0) < (t.declaredCount ?? 0) && inDays(localDay(t.arrivedAt ?? 0), params.get("from"), params.get("to"))).map(data.tripOut));
 };
 
 /** Cash that went out to drivers on a day (for the counter cash-up). */

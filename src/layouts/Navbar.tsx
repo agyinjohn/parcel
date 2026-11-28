@@ -68,6 +68,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/admin/rider-detail": { title: "Rider Performance", description: "Detailed monthly performance report for a rider" },
     "/admin/financial": { title: "Financial Dashboard", description: "Financial overview across all stations" },
     "/admin/financial-reports": { title: "Financial Reports", description: "Comprehensive financial analytics and insights" },
+    "/admin/cash-reports": { title: "Cash & Driver Reports", description: "Counter cash-ups, driver payouts, POD owed to senders and follow-ups" },
     "/admin/system-logs": { title: "System Logs", description: "View system activity and audit logs" },
     "/admin/fuel-requests": { title: "Fuel Requests", description: "Manage all rider fuel requests" },
     "/admin/settings": { title: "Tenant Settings", description: "Configure branding and settings for this tenant" },
