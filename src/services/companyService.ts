@@ -37,6 +37,9 @@ interface ServiceResult<T> {
     success: boolean;
     message: string;
     data?: T;
+    /** Per-field messages from a 400 (keys are request field names). */
+    fieldErrors?: Record<string, string>;
+    status?: number;
 }
 
 class CompanyService {
@@ -66,9 +69,12 @@ class CompanyService {
             };
         } catch (error: any) {
             console.error('Company registration error:', error);
+            const data = error.response?.data?.data;
             return {
                 success: false,
+                status: error.response?.status,
                 message: error.response?.data?.message || 'Failed to register company. Please try again.',
+                fieldErrors: data && typeof data === 'object' ? data : undefined,
             };
         }
     }

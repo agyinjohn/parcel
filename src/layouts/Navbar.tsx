@@ -16,7 +16,6 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     // Parcel Hub
     "/parcel/search": { title: "Parcel Search", description: "Find parcels by recipient, phone, ID, or date range" },
     "/parcel/intake": { title: "Parcel Intake", description: "Manage parcel intake, assignments, and payments" },
-    "/parcel/smart-search": { title: "Smart Search", description: "Search parcels by customer phone number" },
     "/parcel/edit": { title: "Edit Parcels", description: "Edit parcel information and properties (Manager Only)" },
     "/parcel/transfer": { title: "Parcel Transfer", description: "Transfer parcels between stations" },
     "/parcel/incoming": { title: "Incoming Parcels", description: "View and manage incoming parcels" },
@@ -50,7 +49,6 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/delivery/search": { title: "Parcel Search", description: "Find parcels by recipient, phone, ID, or date range" },
     "/delivery/pickup": { title: "Pickup Request", description: "Request pickup of parcels from one location for delivery to another" },
     "/delivery/addresses": { title: "Saved Addresses", description: "Delivery address presets with cost for this office" },
-    "/delivery/smart-search": { title: "Smart Search", description: "Search parcels by customer phone number" },
     "/delivery/settings": { title: "Settings", description: "Manage branch configuration and account preferences" },
     "/delivery/cash-up": { title: "Counter Cash-up", description: "Payments taken at the counter and the end-of-day count" },
     "/delivery/branch-settings": { title: "Branch Settings", description: "Branding, branch details, printing and station charges" },

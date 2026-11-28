@@ -74,7 +74,6 @@ import { DriverInboundReconciliation } from "./screens/DriverInboundReconciliati
 import { DriverTrackerDetail } from "./screens/DriverInboundReconciliation/DriverTrackerDetail";
 import { SystemLogs } from "./screens/Admin/SystemLogs/SystemLogs";
 import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlist/HomeDeliveryWatchlist";
-import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
 import RiderFuelRequest from "./screens/RiderFuelRequest";
 import AdminFuelRequests from "./screens/AdminFuelRequests";
 import AdminStatistics from "./screens/Admin/AdminStatistics";
@@ -130,7 +129,6 @@ export const App = (): JSX.Element => {
                               ════════════════════════════════ */}
                               <Route path="/parcel/intake" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><ParcelRegistration /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/search" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><ParcelSearch /></ParcelLayout></ProtectedRoute>} />
-                              <Route path="/parcel/smart-search" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><SmartSearch /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/edit" element={<ProtectedRoute allowedRoles={["MANAGER"]}><ParcelLayout><ParcelEdit /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/transfer" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><ParcelTransfer /></ParcelLayout></ProtectedRoute>} />
                               <Route path="/parcel/incoming" element={<ProtectedRoute allowedRoles={PARCEL_ROLES}><ParcelLayout><IncomingParcels /></ParcelLayout></ProtectedRoute>} />
@@ -172,7 +170,6 @@ export const App = (): JSX.Element => {
                               <Route path="/delivery/pickup" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><PickupRequest /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/addresses" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><AddressManagement /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/addresses" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><AddressManagement /></DeliveryLayout></ProtectedRoute>} />
-                              <Route path="/delivery/smart-search" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><SmartSearch /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/edit" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelEdit /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/settings" element={<ProtectedRoute allowedRoles={DELIVERY_ROLES}><DeliveryLayout><Settings /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/preferences" element={<Navigate to="/delivery/settings" replace />} />
@@ -227,7 +224,7 @@ export const App = (): JSX.Element => {
                               <Route path="/pickup-request" element={<Navigate to="/parcel/pickup" replace />} />
                               <Route path="/driver-tracker" element={<Navigate to="/parcel/driver-tracker" replace />} />
                               <Route path="/driver-tracker/:phoneKey" element={<Navigate to="/parcel/driver-tracker" replace />} />
-                              <Route path="/smart-search" element={<Navigate to="/parcel/smart-search" replace />} />
+                              <Route path="/smart-search" element={<Navigate to="/parcel/search" replace />} />
                               <Route path="/package-assignments" element={<Navigate to="/delivery/assignments" replace />} />
                               <Route path="/rider-selection" element={<Navigate to="/delivery/rider-selection" replace />} />
                               <Route path="/active-deliveries" element={<Navigate to="/delivery/active" replace />} />
