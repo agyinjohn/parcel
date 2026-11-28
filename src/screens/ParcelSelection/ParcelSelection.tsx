@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
     CheckIcon,
     MapPinIcon,
@@ -24,6 +24,7 @@ import { useLocation as useLocations } from "../../contexts/LocationContext";
 import { RoutePlanPanel, toAssignmentPlan } from "../../components/RoutePlanPanel";
 import type { RoutePlan } from "../../utils/routePlan";
 import { Label } from "@radix-ui/react-label";
+import { activeHolders, isAlreadyOut, ridersHolding, splitFreeAndTaken, uniqueByParcel, type ActiveHolder } from "../../utils/assignmentGuard";
 
 interface ParcelCardProps {
     parcel: ParcelResponse;
@@ -197,7 +198,12 @@ export const ParcelSelection = (): JSX.Element => {
         () => allParcels.filter((p) => selectedParcels.has(p.parcelId)),
         [allParcels, selectedParcels]
     );
+    // Closing by the user is ignored mid-request; the assign handler closes it with resetRiderModal.
     const closeRiderModal = () => {
+        if (submitLock.current) return;
+        resetRiderModal();
+    };
+    const resetRiderModal = () => {
         setShowRiderModal(false);
         setSelectedRider(null);
         setRiderStep("rider");
@@ -208,28 +214,49 @@ export const ParcelSelection = (): JSX.Element => {
     const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
     const [parcelToRemove, setParcelToRemove] = useState<string | null>(null);
 
-    const filterParcelsByMode = (parcels: ParcelResponse[], mode: 'ready' | 'assigned') => {
-        if (mode === 'assigned') {
-            return parcels.filter(p => !!p.parcelAssigned || !!p.riderInfo);
+    // Parcels already on an active rider assignment (from the server), and ones assigned from this
+    // page moments ago, in case the parcel list hasn't caught up yet. Both stop double assignment.
+    const [holders, setHolders] = useState<Map<string, ActiveHolder[]>>(new Map());
+    const justAssigned = useRef<Set<string>>(new Set());
+    const submitLock = useRef(false);
+
+    const filterParcelsByMode = (parcels: ParcelResponse[], mode: 'ready' | 'assigned', held: Map<string, ActiveHolder[]> = holders) => {
+        const out = (p: ParcelResponse) => isAlreadyOut(p, held) || justAssigned.current.has(p.parcelId);
+        return mode === 'assigned' ? parcels.filter(out) : parcels.filter((p) => !out(p));
+    };
+
+    /** Fresh parcels and active assignments from the server. */
+    const fetchFresh = async () => {
+        const [parcelsRes, activeRes] = await Promise.all([
+            frontdeskService.getHomeDeliveryParcels(),
+            frontdeskService.getActiveAssignments(),
+        ]);
+        const parcels = parcelsRes.success && Array.isArray(parcelsRes.data)
+            ? uniqueByParcel((parcelsRes.data as ParcelResponse[]).filter((p) => p.parcelId))
+            : null;
+        const held = activeRes.success ? activeHolders(activeRes.data ?? []) : null;
+        return { parcels, held, message: parcelsRes.message };
+    };
+
+    const applyFresh = (parcels: ParcelResponse[], held: Map<string, ActiveHolder[]> | null) => {
+        const h = held ?? holders;
+        if (held) {
+            setHolders(held);
+            // Once the server shows a parcel as out, the local reminder isn't needed.
+            justAssigned.current.forEach((id) => { if (held.has(id)) justAssigned.current.delete(id); });
         }
-        return parcels.filter(p => !p.parcelAssigned && !p.riderInfo);
+        setAllParcels(parcels);
+        setFilteredParcels(filterParcelsByMode(parcels, filterMode, h));
     };
 
     useEffect(() => {
-        const fetchHomeDeliveryParcels = async () => {
+        const load = async () => {
             setLoading(true);
             try {
-                const response = await frontdeskService.getHomeDeliveryParcels();
-
-                if (response.success && response.data) {
-                    const parcels = Array.isArray(response.data)
-                        ? response.data as ParcelResponse[]
-                        : [];
-                    const validParcels = parcels.filter(p => p.parcelId);
-                    setAllParcels(validParcels);
-                    setFilteredParcels(filterParcelsByMode(validParcels, filterMode));
-                } else {
-                    showToast(response.message || "Failed to load parcels", "error");
+                const { parcels, held, message } = await fetchFresh();
+                if (parcels) applyFresh(parcels, held);
+                else {
+                    showToast(message || "Failed to load parcels", "error");
                     setAllParcels([]);
                     setFilteredParcels([]);
                 }
@@ -242,14 +269,15 @@ export const ParcelSelection = (): JSX.Element => {
                 setLoading(false);
             }
         };
-
-        fetchHomeDeliveryParcels();
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showToast, filterMode]);
 
     useEffect(() => {
         setFilteredParcels(filterParcelsByMode(allParcels, filterMode));
         setSelectedParcels(new Set());
-    }, [allParcels, filterMode]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allParcels, filterMode, holders]);
 
     const toggleParcel = (parcelId: string) => {
         const newSelected = new Set(selectedParcels);
@@ -274,17 +302,8 @@ export const ParcelSelection = (): JSX.Element => {
         }
     };
 
-    // Get unique rider IDs from selected parcels that already have assignments
-    const getAssignedRiderIds = (): Set<string> => {
-        const assignedRiderIds = new Set<string>();
-        selectedParcels.forEach(parcelId => {
-            const parcel = filteredParcels.find(p => p.parcelId === parcelId);
-            if (parcel?.riderInfo?.riderId) {
-                assignedRiderIds.add(parcel.riderInfo.riderId);
-            }
-        });
-        return assignedRiderIds;
-    };
+    // Riders who already have any of the selected parcels: they can't be picked for them again.
+    const getAssignedRiderIds = (): Set<string> => ridersHolding(selectedParcels, allParcels, holders);
 
     const fetchRiders = async () => {
         setLoadingRiders(true);
@@ -309,40 +328,72 @@ export const ParcelSelection = (): JSX.Element => {
             showToast("Please select a rider", "warning");
             return;
         }
-
+        // One request at a time, even on a fast double click.
+        if (submitLock.current) return;
+        submitLock.current = true;
         setIsAssigning(true);
 
+        const wanted = assignOrder.length === selectedParcels.size ? assignOrder : Array.from(selectedParcels);
         try {
-            // Assign in the planned order (pinned stops first, unpinned after), with the plan.
-            const parcelIds = assignOrder.length === selectedParcels.size ? assignOrder : Array.from(selectedParcels);
+            // Check again with the server right before assigning: another manager, another tab or an
+            // earlier request may already have given some of these parcels to a rider.
+            const fresh = await fetchFresh();
+            if (!fresh.parcels || !fresh.held) {
+                showToast("Couldn't check the parcels with the server. Please try again.", "error");
+                return;
+            }
+            const { free, taken, sameRider, gone } = splitFreeAndTaken(wanted, fresh.parcels, fresh.held, {
+                riderId: selectedRider,
+                reassign: filterMode === 'assigned',
+            });
+            if (taken.length || sameRider.length || gone.length) {
+                applyFresh(fresh.parcels, fresh.held);
+                resetRiderModal();
+                const who = taken.map((t) => `${t.parcelId}${t.riderName ? ` (${t.riderName})` : ""}`).join(", ");
+                showToast(
+                    [sameRider.length ? `${selectedRiderData?.name ?? "This rider"} already has: ${sameRider.join(", ")}.` : "",
+                        taken.length ? `Already with a rider: ${who}.` : "", gone.length ? `No longer waiting for delivery: ${gone.join(", ")}.` : "", "Nothing was assigned. Check the list and try again."]
+                        .filter(Boolean).join(" "),
+                    "warning"
+                );
+                return;
+            }
+
+            const parcelIds = wanted.filter((id) => free.includes(id));
             const response = await frontdeskService.assignParcelsToRider(
                 selectedRider, parcelIds, routePlan && routePlan.order.length ? toAssignmentPlan(routePlan) : undefined
             );
 
             if (response.success) {
+                parcelIds.forEach((id) => justAssigned.current.add(id));
                 showToast(`Successfully assigned ${parcelIds.length} parcel(s) to rider!`, "success");
-
-                setSelectedParcels(new Set());
-                closeRiderModal();
-
-                const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
-                if (refreshResponse.success && refreshResponse.data) {
-                    const parcels = Array.isArray(refreshResponse.data)
-                        ? refreshResponse.data as ParcelResponse[]
-                        : [];
-                    setAllParcels(parcels);
-                    setFilteredParcels(filterParcelsByMode(parcels, filterMode));
-                } else {
-                    setAllParcels([]);
-                    setFilteredParcels([]);
-                }
             } else {
-                showToast(response.message || "Failed to assign parcels. Please try again.", "error");
+                // The request may have gone through even though we got an error (e.g. a timeout).
+                // Look before letting the manager retry.
+                const after = await fetchFresh();
+                const nowHeld = after.held ? parcelIds.filter((id) => after.held!.has(id)) : [];
+                if (nowHeld.length === parcelIds.length) {
+                    parcelIds.forEach((id) => justAssigned.current.add(id));
+                    showToast("The parcels were assigned, though the server reply was slow. Don't assign them again.", "success");
+                } else {
+                    showToast(
+                        (response.message || "Failed to assign parcels.") + (nowHeld.length ? ` ${nowHeld.length} of them did get assigned; the list is refreshed.` : " Please try again."),
+                        "error"
+                    );
+                }
+                if (after.parcels) applyFresh(after.parcels, after.held);
+                if (!nowHeld.length) return;
             }
+
+            setSelectedParcels(new Set());
+            resetRiderModal();
+            const refresh = await fetchFresh();
+            if (refresh.parcels) applyFresh(refresh.parcels, refresh.held);
         } catch (error) {
             console.error("Failed to assign parcels:", error);
-            showToast("Failed to assign parcels. Please try again.", "error");
+            showToast("Failed to assign parcels. Refresh the page before trying again.", "error");
         } finally {
+            submitLock.current = false;
             setIsAssigning(false);
         }
     };
@@ -364,17 +415,8 @@ export const ParcelSelection = (): JSX.Element => {
             if (response.success) {
                 showToast("Parcel assignment removed successfully", "success");
 
-                const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
-                if (refreshResponse.success && refreshResponse.data) {
-                    const parcels = Array.isArray(refreshResponse.data)
-                        ? refreshResponse.data as ParcelResponse[]
-                        : [];
-                    setAllParcels(parcels);
-                    setFilteredParcels(filterParcelsByMode(parcels, filterMode));
-                } else {
-                    setAllParcels([]);
-                    setFilteredParcels([]);
-                }
+                const refresh = await fetchFresh();
+                if (refresh.parcels) applyFresh(refresh.parcels, refresh.held);
             } else {
                 showToast(response.message || "Failed to remove assignment", "error");
             }

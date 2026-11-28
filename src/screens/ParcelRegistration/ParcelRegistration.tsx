@@ -214,7 +214,7 @@
 //           pod: false,
 //           delivered: false,
 //           parcelAssigned: false,
-//           fragile: false,
+//           fragile: parcelData.fragile || false,
 //         };
 
 //         return frontdeskService.addParcel(parcelRequest);
@@ -388,6 +388,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { InfoSection } from "./sections/InfoSection";
 import frontdeskService from "../../services/frontdeskService";
 import type { DeliveryLocation } from "../../components/DeliveryLocationPicker";
+import type { DeliveryPricingInfo } from "./sections/InfoSection";
 import authService from "../../services/authService";
 import { useToast } from "../../components/ui/toast";
 import { Package, InboxIcon } from "lucide-react";
@@ -415,6 +416,8 @@ interface ParcelFormData {
   images?: string[];
   parcelWeight?: number;
   deliveryLocation?: DeliveryLocation;
+  deliveryPricing?: DeliveryPricingInfo;
+  fragile?: boolean;
 }
 
 const STORAGE_KEY_PARCELS = "parcel_registration_parcels";
@@ -611,6 +614,8 @@ export const ParcelRegistration = (): JSX.Element => {
             receiverPlaceId: parcelData.deliveryLocation.placeId,
             receiverLocationSource: parcelData.deliveryLocation.source,
           } : {}),
+          // Distance-based pricing (docs/BACKEND_TODO.md): what the table suggested and why staff changed it.
+          ...(parcelData.homeDelivery && parcelData.deliveryPricing ? parcelData.deliveryPricing : {}),
         };
 
         return frontdeskService.addParcel(parcelRequest);

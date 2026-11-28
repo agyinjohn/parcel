@@ -3,6 +3,15 @@ import authService from './authService';
 import { API_ENDPOINTS } from '../config/api';
 import type { PartnerParcel, PartnerParcelStatus } from '../screens/PartnerPortal/partnerData';
 
+/** True when the endpoint itself doesn't exist (Spring's "no route"), not a "record not found" 404. */
+const endpointMissing = (error: any) => {
+    const status = error?.response?.status;
+    if (status === 405) return true;
+    if (status !== 404) return false;
+    const msg = String(error?.response?.data?.message ?? error?.response?.data?.error ?? '');
+    return !msg || /no static resource|no handler found|^not found$/i.test(msg.trim());
+};
+
 const API_BASE_URL = API_ENDPOINTS.VENDOR;
 
 export type ApiParcelStatus =
@@ -234,9 +243,24 @@ class VendorService {
         );
     }
 
-    async submitParcel(payload: VendorParcelRequest): Promise<{ success: boolean; message: string; data?: ApiParcel }> {
+    /**
+     * All-or-nothing batch: POST /api-vendor/parcels/batch { parcels: [...] } → the created parcels.
+     * `unsupported` when the backend doesn't have it yet (the caller then sends one by one).
+     * The Idempotency-Key lets the backend return the first result if the same batch is retried.
+     */
+    async submitBatch(payloads: VendorParcelRequest[], idempotencyKey: string): Promise<{ success: boolean; message: string; data?: ApiParcel[]; unsupported?: boolean }> {
         try {
-            const response = await this.apiClient.post<ApiParcel>('/parcels', payload);
+            const response = await this.apiClient.post<ApiParcel[]>('/parcels/batch', { parcels: payloads }, { headers: { 'Idempotency-Key': idempotencyKey } });
+            return { success: true, message: 'Parcels submitted successfully', data: response.data };
+        } catch (error: any) {
+            if (endpointMissing(error)) return { success: false, unsupported: true, message: 'Batch submit not available' };
+            return { success: false, message: error.response?.data?.message || 'Failed to submit the parcels. Nothing was saved; please try again.' };
+        }
+    }
+
+    async submitParcel(payload: VendorParcelRequest, idempotencyKey?: string): Promise<{ success: boolean; message: string; data?: ApiParcel }> {
+        try {
+            const response = await this.apiClient.post<ApiParcel>('/parcels', payload, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined);
             return { success: true, message: 'Parcel submitted successfully', data: response.data };
         } catch (error: any) {
             return {
@@ -254,6 +278,10 @@ class VendorService {
             const response = await this.apiClient.put<ApiParcel>(`/parcels/${parcelId}`, payload);
             return { success: true, message: 'Parcel updated successfully', data: response.data };
         } catch (error: any) {
+            // The backend has no edit endpoint yet (PUT /api-vendor/parcels/{id}; docs/BACKEND_TODO.md).
+            if (endpointMissing(error)) {
+                return { success: false, message: "Editing parcels isn't available yet. Please call the station to change this parcel." };
+            }
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to update parcel. Please try again.',

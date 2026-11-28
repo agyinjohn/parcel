@@ -6,7 +6,7 @@ import { useToast } from "../../components/ui/toast";
 import { formatCurrency } from "../../utils/dataHelpers";
 import driverPayments, { type DriverPayout, type FeeLine, type Statement } from "../../services/driverPaymentsService";
 import { AdjustmentForm, DriverForm, Modal, PayDialog, ReceiptDialog } from "./dialogs";
-import { payoutTotals, prettyPhone } from "./payoutMath";
+import { payoutTotals, prettyPhone, statementMismatches } from "./payoutMath";
 
 const STATE_CHIP: Record<FeeLine["state"], string> = {
     READY: "bg-green-50 text-green-700",
@@ -49,11 +49,13 @@ export const DriverStatement = ({ driverId, canManage, station, onChanged }: Pro
     const [adjusting, setAdjusting] = useState(false);
     const [holdLine, setHoldLine] = useState<FeeLine | null>(null);
     const [holdReason, setHoldReason] = useState("");
+    // Paid history is limited to keep the statement light; unpaid fees always come back, however old.
+    const [historyDays, setHistoryDays] = useState<number | null>(60);
 
     useEffect(() => {
         let stale = false;
         setLoading(true);
-        driverPayments.statement(driverId).then((r) => {
+        driverPayments.statement(driverId, historyDays ? Date.now() - historyDays * 864e5 : undefined).then((r) => {
             if (stale) return;
             setLoading(false);
             if (r.success && r.data) {
@@ -66,7 +68,7 @@ export const DriverStatement = ({ driverId, canManage, station, onChanged }: Pro
             } else setError(r.message || "Couldn't load the statement.");
         });
         return () => { stale = true; };
-    }, [driverId, version]);
+    }, [driverId, version, historyDays]);
 
     const allLines = useMemo(() => (st?.trips ?? []).flatMap((t) => (t.lines ?? []).map((l) => ({ ...l, tripId: t.tripId }))), [st]);
     const chosen = allLines.filter((l) => selected.has(l.id) && l.state === "READY");
@@ -121,6 +123,16 @@ export const DriverStatement = ({ driverId, canManage, station, onChanged }: Pro
                     </div>
                 ))}
             </div>
+
+            {(() => {
+                const problems = statementMismatches(balances, trips);
+                return problems.length > 0 ? (
+                    <div role="alert" className="flex items-start gap-2 border-b border-red-200 bg-red-50 px-5 py-2.5 text-xs text-red-800">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span><b>These figures don't add up, so don't pay until it's checked.</b> {problems.join(". ")}. Refresh; if it stays, report it to the admin.</span>
+                    </div>
+                ) : null;
+            })()}
 
             {st.openAdjustments.length > 0 && (
                 <div className="border-b border-[#ececec] bg-amber-50/60 px-5 py-2.5 text-xs text-amber-900">
@@ -182,6 +194,13 @@ export const DriverStatement = ({ driverId, canManage, station, onChanged }: Pro
                         </div>
                     );
                 })}
+                {historyDays !== null && (
+                    <div className="px-5 pt-2">
+                        <button onClick={() => setHistoryDays(null)} className="text-xs font-medium text-[#ea690c] hover:underline">
+                            Showing paid trips from the last {historyDays} days (unpaid ones always show). Show older paid trips
+                        </button>
+                    </div>
+                )}
                 {st.payouts.length > 0 && (
                     <div className="px-5 py-3">
                         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9a9a9a]">Recent payouts</p>
@@ -210,7 +229,8 @@ export const DriverStatement = ({ driverId, canManage, station, onChanged }: Pro
 
             {paying && (
                 <PayDialog driver={driver} lines={chosen} tripCount={chosenTrips} openAdvances={st.openAdjustments} onClose={() => setPaying(false)}
-                    onPaid={(p) => { setPaying(false); setReceipt(p); reload(); }} />
+                    onPaid={(p) => { setPaying(false); setReceipt(p); reload(); }}
+                    onStale={() => { setPaying(false); setSelected(new Set()); reload(); }} />
             )}
             {receipt && <ReceiptDialog payout={receipt} station={station} canManage={canManage} onClose={() => setReceipt(null)} onChanged={reload} />}
             {editing && <DriverForm driver={driver} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); reload(); }} />}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupActive, sinceAssigned, toActiveParcel } from "./activeDeliveries";
+import { duplicateCount, groupActive, sinceAssigned, toActiveParcel } from "./activeDeliveries";
 
 const parcel = (id: string, extra: Record<string, unknown> = {}) => ({ parcelId: id, receiverName: `R ${id}`, delivered: false, returned: false, deliveryCost: 20, inboundCost: 10, ...extra });
 
@@ -20,6 +20,19 @@ describe("groupActive", () => {
         const now = 200 * 3_600_000;
         const r = groupActive([{ assignmentId: "a", status: "ASSIGNED", riderInfo: { riderId: "r" }, assignedAt: now - 30 * 3_600_000, parcels: [parcel("P1"), parcel("P2")] }], now);
         expect(r[0].overdue).toBe(2);
+    });
+
+    it("lists a parcel on two active assignments once, under the newest, and flags the other", () => {
+        const riders = groupActive([
+            { assignmentId: "old", status: "ASSIGNED", assignedAt: 1, riderInfo: { riderId: "r1", riderName: "Kwame" }, parcels: [parcel("P1"), parcel("P2")] },
+            { assignmentId: "new", status: "ASSIGNED", assignedAt: 2, riderInfo: { riderId: "r2", riderName: "Ama" }, parcels: [parcel("P1")] },
+        ]);
+        const ama = riders.find((r) => r.riderId === "r2")!;
+        const kwame = riders.find((r) => r.riderId === "r1")!;
+        expect(ama.parcels.map((p) => p.parcelId)).toEqual(["P1"]);
+        expect(ama.parcels[0].alsoWith).toEqual([{ assignmentId: "old", riderName: "Kwame" }]);
+        expect(kwame.parcels.map((p) => p.parcelId)).toEqual(["P2"]);
+        expect(duplicateCount(riders)).toBe(1);
     });
 
     it("treats a missing delivered flag as not delivered and ignores duplicates", () => {

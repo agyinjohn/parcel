@@ -15,6 +15,8 @@ import { PlusIcon, Package, User, Truck, FileText, Save, X, ImageIcon } from "lu
 import { CostInput } from "../../../components/ui/CostInput";
 import { DeliveryLocationPicker, type DeliveryLocation } from "../../../components/DeliveryLocationPicker";
 import { useToast } from "../../../components/ui/toast";
+import { useDeliveryQuote } from "../useDeliveryQuote";
+import { OVERRIDE_REASONS, type OverrideReason } from "../../../utils/deliveryPricing";
 
 interface ParcelFormData {
     driverName?: string;
@@ -36,8 +38,20 @@ interface ParcelFormData {
     hasCalled?: boolean;
     images?: string[];
     parcelWeight?: number;
+    fragile?: boolean;
     /** Pinned drop-off point; required for home delivery when the map is available. */
     deliveryLocation?: DeliveryLocation;
+    /** How the delivery price was set (distance-based pricing, stage 1). */
+    deliveryPricing?: DeliveryPricingInfo;
+}
+
+export interface DeliveryPricingInfo {
+    distanceKm: number;
+    distanceSource: "ROAD" | "ESTIMATE";
+    suggestedDeliveryCost: number;
+    pricingTableVersion?: number;
+    /** Set when staff charged something other than the suggestion. */
+    priceOverrideReason?: OverrideReason;
 }
 
 interface InfoSectionProps {
@@ -142,6 +156,30 @@ export const InfoSection = ({
     const [isDriverLocked, setIsDriverLocked] = useState(false);
     const [images, setImages] = useState<string[]>([]);
     const [parcelWeight, setParcelWeight] = useState<number | undefined>(undefined);
+    const [fragile, setFragile] = useState(false);
+    // Suggested delivery price from distance and weight; staff may change it with a reason.
+    const { quote, loading: quoteLoading } = useDeliveryQuote(homeDelivery, deliveryLocation, parcelWeight, fragile);
+    const [overrideReason, setOverrideReason] = useState<OverrideReason | "">("");
+    const lastSuggested = useRef<number | null>(null);
+    useEffect(() => {
+        if (!quote) return;
+        // Fill in the suggestion unless staff have typed their own price.
+        if (deliveryCost === undefined || deliveryCost === lastSuggested.current) setDeliveryCost(quote.price);
+        lastSuggested.current = quote.price;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [quote?.price]);
+    const priceOverridden = !!quote && deliveryCost != null && Math.abs(deliveryCost - quote.price) > 0.009;
+    useEffect(() => { if (!priceOverridden) setOverrideReason(""); }, [priceOverridden]);
+    const pricingInfo = (): DeliveryPricingInfo | undefined =>
+        homeDelivery && quote
+            ? {
+                distanceKm: quote.distanceKm,
+                distanceSource: quote.distanceSource,
+                suggestedDeliveryCost: quote.price,
+                pricingTableVersion: quote.tableVersion,
+                priceOverrideReason: priceOverridden && overrideReason ? overrideReason : undefined,
+            }
+            : undefined;
     const [addresses, setAddresses] = useState<Address[]>([]);
     const [loadingAddresses, setLoadingAddresses] = useState(false);
     const [showAddressDropdown, setShowAddressDropdown] = useState(false);
@@ -206,6 +244,8 @@ export const InfoSection = ({
             setItemValue(undefined);
             setHomeDelivery(false);
             setDeliveryCost(undefined);
+            setOverrideReason("");
+            lastSuggested.current = null;
             setSpecialNotes("");
             setPhoneError("");
             setSaveToAddressListChecked(false);
@@ -215,6 +255,8 @@ export const InfoSection = ({
             setIsDriverLocked(false);
             setImages([]);
             setParcelWeight(undefined);
+            setFragile(false);
+        setFragile(false);
         }
     }, [parcels.length, sessionDriver]);
 
@@ -282,6 +324,10 @@ export const InfoSection = ({
                 setPhoneError("Choose the delivery location: search a landmark or pin it on the map");
                 return false;
             }
+            if (priceOverridden && !overrideReason) {
+                setPhoneError(`Say why the delivery price differs from the suggested GHC ${quote!.price.toFixed(2)}, or use the suggested price`);
+                return false;
+            }
         }
         return true;
     };
@@ -320,7 +366,9 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            fragile: fragile || undefined,
             deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
+            deliveryPricing: pricingInfo(),
         };
 
         onAddParcel(parcelData);
@@ -367,12 +415,15 @@ export const InfoSection = ({
         setItemValue(undefined);
         setHomeDelivery(false);
         setDeliveryCost(undefined);
+        setOverrideReason("");
+        lastSuggested.current = null;
         setDeliveryLocation(null);
         setSpecialNotes("");
         setPhoneError("");
         setSaveToAddressListChecked(false);
         setImages([]);
         setParcelWeight(undefined);
+        setFragile(false);
     };
 
     const handleSaveDirectly = () => {
@@ -409,7 +460,9 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            fragile: fragile || undefined,
             deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
+            deliveryPricing: pricingInfo(),
         };
 
         // Capture address-list preference and values for after parcel save (behind the scene)
@@ -453,11 +506,14 @@ export const InfoSection = ({
         setItemValue(undefined);
         setHomeDelivery(false);
         setDeliveryCost(undefined);
+        setOverrideReason("");
+        lastSuggested.current = null;
         setDeliveryLocation(null);
         setSpecialNotes("");
         setPhoneError("");
         setImages([]);
         setParcelWeight(undefined);
+        setFragile(false);
     };
 
     // Check if driver fields are filled (considering locked state)
@@ -913,6 +969,35 @@ export const InfoSection = ({
                                                         placeholder="0"
                                                         inputClassName="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                                     />
+                                                    {quoteLoading ? (
+                                                        <p className="text-xs text-[#6b7280]">Working out the price…</p>
+                                                    ) : quote ? (
+                                                        <div className="space-y-1.5 rounded-lg border border-orange-100 bg-orange-50/60 px-2.5 py-2 text-xs" data-testid="delivery-quote">
+                                                            <p className="text-neutral-700">
+                                                                Suggested <b className="text-[#ea690c]">GHC {quote.price.toFixed(2)}</b> · {quote.distanceKm} km {quote.distanceSource === "ESTIMATE" ? "(estimated)" : "by road"}
+                                                                {parcelWeight ? ` · ${parcelWeight} kg` : ""}{fragile ? " · fragile" : ""}
+                                                            </p>
+                                                            <p className="text-[#6b7280]">{quote.lines.map((l) => `${l.label} ${l.amount.toFixed(2)}`).join(" + ")}</p>
+                                                            {priceOverridden && (
+                                                                <div className="space-y-1">
+                                                                    <select
+                                                                        aria-label="Why is the price different?"
+                                                                        value={overrideReason}
+                                                                        onChange={(e) => setOverrideReason(e.target.value as OverrideReason)}
+                                                                        className={`w-full rounded-md border bg-white px-2 py-1.5 text-xs ${overrideReason ? "border-[#d1d1d1]" : "border-red-300"}`}
+                                                                    >
+                                                                        <option value="">Why is the price different? *</option>
+                                                                        {OVERRIDE_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                                                    </select>
+                                                                    <button type="button" onClick={() => setDeliveryCost(quote.price)} className="font-semibold text-[#ea690c] hover:underline">Use suggested price</button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : deliveryLocation ? (
+                                                        <p className="text-xs text-[#9a9a9a]">No price table for this station yet; enter the price.</p>
+                                                    ) : (
+                                                        <p className="text-xs text-[#9a9a9a]">Pin the delivery location to get a suggested price.</p>
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-col gap-2">
                                                     <Label className="text-sm font-semibold text-neutral-800">
@@ -968,6 +1053,11 @@ export const InfoSection = ({
                                         }}
                                         className="w-full md:w-48 px-3 py-2 rounded-lg border border-[#d1d1d1] bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     />
+                                    <label className="mt-1 flex w-fit cursor-pointer items-center gap-2 text-sm text-neutral-800">
+                                        <input type="checkbox" checked={fragile} onChange={(e) => setFragile(e.target.checked)} className="h-4 w-4 accent-[#ea690c]" />
+                                        Fragile: handle with care
+                                        <span className="text-xs text-[#9a9a9a]">(may add a handling fee to home delivery)</span>
+                                    </label>
                                 </div>
 
                                 <div className="flex flex-col gap-2 md:col-span-2">

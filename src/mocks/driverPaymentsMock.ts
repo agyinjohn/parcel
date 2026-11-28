@@ -2,7 +2,7 @@
  * Sample-data answers for driver payments (handoff Part M), built from the mock driver fees so
  * `npm run dev:mock` can show the Driver Payments page. Mirrors the backend-test API shapes.
  */
-type Handler = (ctx: { params: URLSearchParams; body: any; match: RegExpMatchArray }) => unknown;
+type Handler = (ctx: { params: URLSearchParams; body: any; match: RegExpMatchArray; config?: any }) => unknown;
 type On = (method: string, pattern: RegExp, handler: Handler) => void;
 
 interface Ctx {
@@ -163,12 +163,15 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         return ctx.page(rows, params);
     });
 
-    on("get", /^\/api-frontdesk\/drivers\/([^/]+)\/statement$/, ({ match }) => {
+    on("get", /^\/api-frontdesk\/drivers\/([^/]+)\/statement$/, ({ match, params }) => {
         const d = findDriver(match[1]);
+        const from = Number(params.get("from")) || 0;
+        // `from` limits only paid history: a trip with any unpaid fee is always included.
+        const keep = (t: any) => (t.arrivedAt ?? 0) >= from || tripOut(t).lines.some((l: any) => l.state !== "PAID" && l.state !== "NOT_PAYABLE");
         return {
             driver: d,
             balances: balances(d.id),
-            trips: trips.filter((t) => t.driverId === d.id).sort((a, b) => (b.arrivedAt ?? 0) - (a.arrivedAt ?? 0)).map(tripOut),
+            trips: trips.filter((t) => t.driverId === d.id && keep(t)).sort((a, b) => (b.arrivedAt ?? 0) - (a.arrivedAt ?? 0)).map(tripOut),
             payouts: payouts.filter((p) => p.driverId === d.id).sort((a, b) => (b.paidAt ?? 0) - (a.paidAt ?? 0)),
             openAdjustments: adjustments.filter((a) => a.driverId === d.id && a.open),
         };
@@ -227,7 +230,11 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         return payouts.filter((p) => (p.paidAt ?? 0) >= from && (p.paidAt ?? 0) <= to && (!params.get("driverId") || p.driverId === params.get("driverId")) && (params.get("unconfirmed") !== "true" || (!p.confirmed && !p.reversed)));
     });
     on("get", /^\/api-frontdesk\/driver-payouts\/([^/]+)$/, ({ match }) => payouts.find((p) => p.id === match[1]) ?? undefined);
-    on("post", /^\/api-frontdesk\/driver-payouts$/, ({ body }) => {
+    const seenKeys = new Map<string, any>();
+    on("post", /^\/api-frontdesk\/driver-payouts$/, ({ body, config }) => {
+        // Idempotency-Key: a retried payout returns the first result instead of paying twice.
+        const key = config?.headers?.["Idempotency-Key"] ?? config?.headers?.get?.("Idempotency-Key");
+        if (key && seenKeys.has(key)) return seenKeys.get(key);
         const d = findDriver(body?.driverId);
         if (d.status === "BLOCKED") throw { status: 409, message: "This driver is blocked" };
         const chosen = (body?.lineIds ?? []).map((id: string) => lines.find((l) => l.id === id));
@@ -239,6 +246,13 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         const bonuses = round2(adj.filter((a) => a.type === "BONUS").reduce((s, a) => s + Number(a.amount), 0));
         const net = round2(gross - deductions + bonuses);
         if (net < 0) throw { status: 400, message: "Deductions are more than the amount owed" };
+        if (body.expectedNetAmount != null && Math.abs(Number(body.expectedNetAmount) - net) > 0.009)
+            throw { status: 409, message: `The total is now GHC ${net.toFixed(2)}, not GHC ${Number(body.expectedNetAmount).toFixed(2)}` };
+        for (const a of adj.filter((x) => x.adjustmentId)) {
+            const o = adjustments.find((x) => x.id === a.adjustmentId);
+            if (!o || !o.open) throw { status: 409, message: "An advance or adjustment was already settled" };
+            if (o.type === "ADVANCE" && Number(a.amount) > round2(o.amount - (o.repaidAmount || 0)) + 0.009) throw { status: 409, message: "That's more than the advance still owed" };
+        }
         const p: MockPayout = {
             id: `po-${payouts.length + 1}`, receiptNo: `DP-${String(412 + payouts.length).padStart(5, "0")}`, officeId: ctx.officeId, driverId: d.id, driverName: d.name, driverPhone: d.phoneNumbers[0],
             lineIds: chosen.map((l: any) => l.id), tripCount: new Set(chosen.map((l: any) => l.tripId)).size, adjustments: adj, grossAmount: gross, deductions, bonuses, netAmount: net,
@@ -253,6 +267,9 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         p.balanceReadyAfter = b.readyAmount;
         p.balanceWaitingAfter = b.waitingAmount;
         payouts.push(p);
+        if (key) seenKeys.set(key, p);
+        // Test hook (sample data only): record the payout, then lose the reply like a dropped connection.
+        if ((globalThis as any).__mockDropPayoutReply) { (globalThis as any).__mockDropPayoutReply = false; throw new Error("Network Error"); }
         return p;
     });
     on("post", /^\/api-frontdesk\/driver-payouts\/([^/]+)\/send-code$/, ({ match }) => {
@@ -272,8 +289,17 @@ export const registerDriverPayments = (on: On, ctx: Ctx) => {
         const p = payouts.find((x) => x.id === match[1]);
         if (!p) throw { status: 404, message: "Payout not found" };
         if (!body?.reason) throw { status: 400, message: "A reason is required" };
+        if (p.reversed) throw { status: 409, message: "This payout was already reversed" };
         Object.assign(p, { reversed: true, reversedReason: body.reason, reversedAt: now(), reversedByName: "Kofi Mensah" });
         lines.filter((l) => l.payoutId === p.id).forEach((l) => (l.payoutId = undefined));
+        // Undo what the payout settled: advance repayments and saved deductions/bonuses reopen.
+        (p.adjustments ?? []).filter((a: any) => a.adjustmentId).forEach((a: any) => {
+            const o = adjustments.find((x) => x.id === a.adjustmentId);
+            if (!o) return;
+            o.repaidAmount = round2(Math.max(0, (o.repaidAmount || 0) - Number(a.amount)));
+            o.open = true;
+            o.appliedPayoutId = undefined;
+        });
         return p;
     });
 };

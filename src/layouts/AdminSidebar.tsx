@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity, Map as MapIcon, Wallet } from "lucide-react";
+import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity, Map as MapIcon, Wallet, Calculator } from "lucide-react";
+import { CompanyName } from "../components/BrandMark";
 import { API_V2 } from "../config/api";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
@@ -43,6 +44,7 @@ const navGroups: {
             { label: "Delivery Statistics",    path: "/admin/statistics",        icon: TrendingUp,      roles: BOTH },
             { label: "Financial Reports",      path: "/admin/financial-reports", icon: BarChart2,       roles: BOTH },
             // Counter cash and driver payment reports need the updated backend.
+            { label: "Delivery Pricing Review", path: "/admin/pricing-review", icon: Calculator as unknown as React.ComponentType<{ size?: number; className?: string }>, roles: BOTH },
             { label: "Cash & Driver Reports",  path: "/admin/cash-reports",      icon: Wallet as unknown as React.ComponentType<{ size?: number; className?: string }>, roles: API_V2 ? BOTH : [] },
             { label: "Fuel Requests",          path: "/admin/fuel-requests",     icon: Fuel,            roles: BOTH },
         ],
@@ -94,9 +96,7 @@ export const AdminSidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                                 <img className="h-[40px] w-[40px] object-cover rounded-lg shadow-lg ring-2 ring-orange-100 dark:ring-orange-900/30" alt="Logo" src="/logo-1.png" />
                             )}
                             <div className="flex flex-col">
-                                <span className="font-bold text-sm bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent leading-tight">
-                                    {branding.companyName}
-                                </span>
+                                <CompanyName name={branding.companyName} />
                                 <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     {isSuperAdmin ? "Super Admin" : "Admin Panel"}
                                 </span>

@@ -31,7 +31,6 @@ import { ParcelCostsAndPOD } from "./screens/ParcelCostsAndPOD";
 import { ParcelReview } from "./screens/ParcelReview";
 import { ParcelSMSSuccess } from "./screens/ParcelSMSSuccess";
 import { ParcelSelection } from "./screens/ParcelSelection";
-import { ParcelRiderSelection } from "./screens/ParcelRiderSelection";
 import { ActiveDeliveries } from "./screens/ActiveDeliveries";
 import { RiderDashboard } from "./screens/RiderDashboard";
 import { RiderHistory } from "./screens/RiderHistory";
@@ -55,6 +54,8 @@ import { Settings } from "./screens/Settings/Settings";
 import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { CounterCashUp } from "./screens/CounterCashUp/CounterCashUp";
 import { DriverPayments } from "./screens/DriverPayments/DriverPayments";
+import { PartnerApply } from "./screens/PartnerApply/PartnerApply";
+import { PricingReview } from "./screens/Admin/PricingReview/PricingReview";
 import { CashReports } from "./screens/Admin/CashReports/CashReports";
 import { API_V2 } from "./config/api";
 import { Help } from "./screens/Help/Help";
@@ -64,7 +65,6 @@ import { DeliveryIncome } from "./screens/Admin/DeliveryIncome/DeliveryIncome";
 import { DeliveryAccountability } from "./screens/Admin/DeliveryAccountability/DeliveryAccountability";
 import { TenantManagement } from "./screens/Admin/TenantManagement/TenantManagement";
 import { CrossTenantAnalytics } from "./screens/Admin/CrossTenantAnalytics/CrossTenantAnalytics";
-import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
 import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
@@ -111,12 +111,13 @@ export const App = (): JSX.Element => {
                               <Route path="/reset-password" element={<ResetPassword />} />
 
                               {/* ── Public ── */}
-                              <Route path="/track" element={<TrackParcel />} />
+                              <Route path="/track" element={<Navigate to="/receive" replace />} />
                               <Route path="/p/:parcelId" element={<ParcelScan />} />
                               <Route path="/scan" element={<ParcelScan />} />
                               <Route path="/receive" element={<CustomerAuthProvider><CustomerParcelHub /></CustomerAuthProvider>} />
 
                               {/* ── Partner Portal ── */}
+                              <Route path="/partner/apply" element={<PartnerApply />} />
                               <Route path="/partner/*" element={<ProtectedRoute allowedRoles={["VENDOR"]}><PartnerPortal /></ProtectedRoute>} />
 
                               {/* ── Root / Marketing ── */}
@@ -153,7 +154,7 @@ export const App = (): JSX.Element => {
                                   DELIVERY HUB  /delivery/*
                               ════════════════════════════════ */}
                               <Route path="/delivery/assignments" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelSelection /></DeliveryLayout></ProtectedRoute>} />
-                              <Route path="/delivery/rider-selection" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelRiderSelection /></DeliveryLayout></ProtectedRoute>} />
+                              <Route path="/delivery/rider-selection" element={<Navigate to="/delivery/assignments" replace />} />
                               <Route path="/delivery/active" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ActiveDeliveries /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/reconciliation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><Reconciliation /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/reconciliation-confirmation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ReconciliationConfirmation /></DeliveryLayout></ProtectedRoute>} />
@@ -190,6 +191,7 @@ export const App = (): JSX.Element => {
                               <Route path="/admin/rider-detail" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><RiderDetail /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/financial" element={<Navigate to="/admin/dashboard" replace />} />
                               <Route path="/admin/financial-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><FinancialReports /></AdminLayout></ProtectedRoute>} />
+                              <Route path="/admin/pricing-review" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><PricingReview /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/cash-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><CashReports /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/system-logs" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><SystemLogs /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/rider-map" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><RiderMap /></AdminLayout></ProtectedRoute>} />
@@ -226,7 +228,7 @@ export const App = (): JSX.Element => {
                               <Route path="/driver-tracker/:phoneKey" element={<Navigate to="/parcel/driver-tracker" replace />} />
                               <Route path="/smart-search" element={<Navigate to="/parcel/search" replace />} />
                               <Route path="/package-assignments" element={<Navigate to="/delivery/assignments" replace />} />
-                              <Route path="/rider-selection" element={<Navigate to="/delivery/rider-selection" replace />} />
+                              <Route path="/rider-selection" element={<Navigate to="/delivery/assignments" replace />} />
                               <Route path="/active-deliveries" element={<Navigate to="/delivery/active" replace />} />
                               <Route path="/reconciliation" element={<Navigate to="/delivery/reconciliation" replace />} />
                               <Route path="/reconciliation-history" element={<Navigate to="/delivery/reconciliation" replace />} />

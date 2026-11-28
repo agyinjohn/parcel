@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { X, InboxIcon, SearchIcon, Layers, Edit, LogOut, CarIcon, ArrowDownToLine, ArrowUpFromLine, Settings, HelpCircle, Building2, Wallet } from "lucide-react";
+import { CompanyName } from "../components/BrandMark";
 import { useStation } from "../contexts/StationContext";
 import { API_V2 } from "../config/api";
 import { useBranding } from "../contexts/BrandingContext";
@@ -50,9 +51,7 @@ export const ParcelSidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                                 <img className="h-[40px] w-[40px] object-cover rounded-lg shadow-lg ring-2 ring-orange-100 dark:ring-orange-900/30" alt="Logo" src="/logo-1.png" />
                             )}
                             <div className="flex flex-col">
-                                <span className="font-bold text-sm bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent leading-tight">
-                                    {branding.branchName || branding.companyName}
-                                </span>
+                                <CompanyName name={branding.branchName || branding.companyName} />
                                 <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                     Parcel Hub
                                 </span>

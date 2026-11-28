@@ -42,9 +42,8 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
 
         setPositionRef.current = setPosition;
 
-        if (!coords) {
-          onChangeRef.current({ latitude: initial.lat, longitude: initial.lng });
-        }
+        // Don't pick a spot for the customer: the map starts on Accra, but nothing is selected
+        // until they search, tap, drag the pin or use their location.
 
         if (searchInputRef.current) {
           detachAutocomplete = attachPlacesAutocomplete(searchInputRef.current, (lat, lng, label) => {
@@ -64,7 +63,7 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
 
     const stopAuthWatch = onGoogleMapsAuthFailure(() => {
       if (!cancelled) {
-        setMapError("The map is unavailable because Google rejected the Maps key. Please type the address instead.");
+        setMapError("The map isn't available right now. Use your current location, and add a landmark below.");
         setLoading(false);
       }
     });
@@ -127,7 +126,8 @@ export const GoogleMapPicker = ({ coords, onChange }: Props) => {
         type="button"
         variant="outline"
         onClick={captureLocation}
-        disabled={locating || loading || !!mapError}
+        // Works without the map: the phone's GPS is enough to set the delivery point.
+        disabled={locating}
         className="w-full h-10 rounded-xl border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
       >
         {locating ? (

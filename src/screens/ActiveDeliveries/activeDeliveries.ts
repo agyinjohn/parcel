@@ -30,6 +30,8 @@ export interface ActiveParcel {
     podAmount: number;
     /** Everything the rider should hand in for this parcel. */
     toCollect: number;
+    /** Other active assignments that also hold this parcel (a duplicate assignment). */
+    alsoWith?: { assignmentId: string; riderName: string }[];
 }
 
 export interface ActiveRider {
@@ -78,33 +80,51 @@ export const toActiveParcel = (a: any, p: any): ActiveParcel => {
     };
 };
 
-/** Group active parcels by rider; riders with the most parcels first. */
+/**
+ * Group active parcels by rider; riders with the most parcels first.
+ * A parcel on more than one active assignment (a duplicate) is listed once, under its newest
+ * assignment, with the others in `alsoWith`, so it isn't counted or collected twice.
+ */
 export const groupActive = (assignments: any[], now = Date.now()): ActiveRider[] => {
-    const byRider = new Map<string, ActiveRider>();
-    const seen = new Set<string>();
+    type Entry = { a: any; item: ActiveParcel; riderId: string; riderName: string; phone?: string };
+    const byParcel = new Map<string, Entry[]>();
     assignments.forEach((a) => {
         if (!ACTIVE_STATUSES.includes(a?.status)) return;
         const riderId = a.riderInfo?.riderId ?? a.riderId ?? "unknown";
+        const riderName = a.riderInfo?.riderName ?? a.riderName ?? "Unknown rider";
         (a.parcels ?? []).forEach((p: any) => {
             if (!p?.parcelId || p.delivered === true || p.returned === true || p.pickedUp === true) return;
-            const item = toActiveParcel(a, p);
-            if (seen.has(item.key)) return;
-            seen.add(item.key);
-            let r = byRider.get(riderId);
-            if (!r) {
-                r = { riderId, name: a.riderInfo?.riderName ?? a.riderName ?? "Unknown rider", phone: a.riderInfo?.riderPhoneNumber ?? a.riderPhoneNumber, parcels: [], overdue: 0, toCollect: 0 };
-                byRider.set(riderId, r);
-            }
-            r.parcels.push(item);
-            if (sinceAssigned(item.assignedAt, now).stale) r.overdue++;
-            r.toCollect = round2(r.toCollect + item.toCollect);
-            if (item.assignedAt && (!r.oldestAssignedAt || item.assignedAt < r.oldestAssignedAt)) r.oldestAssignedAt = item.assignedAt;
+            const list = byParcel.get(p.parcelId) ?? [];
+            if (list.some((e) => e.a.assignmentId === a.assignmentId)) return;
+            list.push({ a, item: toActiveParcel(a, p), riderId, riderName, phone: a.riderInfo?.riderPhoneNumber ?? a.riderPhoneNumber });
+            byParcel.set(p.parcelId, list);
         });
+    });
+
+    const byRider = new Map<string, ActiveRider>();
+    byParcel.forEach((entries) => {
+        entries.sort((x, y) => (y.a.assignedAt ?? 0) - (x.a.assignedAt ?? 0));
+        const [main, ...others] = entries;
+        const item = others.length
+            ? { ...main.item, alsoWith: others.map((o) => ({ assignmentId: o.a.assignmentId, riderName: o.riderName })) }
+            : main.item;
+        let r = byRider.get(main.riderId);
+        if (!r) {
+            r = { riderId: main.riderId, name: main.riderName, phone: main.phone, parcels: [], overdue: 0, toCollect: 0 };
+            byRider.set(main.riderId, r);
+        }
+        r.parcels.push(item);
+        if (sinceAssigned(item.assignedAt, now).stale) r.overdue++;
+        r.toCollect = round2(r.toCollect + item.toCollect);
+        if (item.assignedAt && (!r.oldestAssignedAt || item.assignedAt < r.oldestAssignedAt)) r.oldestAssignedAt = item.assignedAt;
     });
     const riders = Array.from(byRider.values());
     riders.forEach((r) => r.parcels.sort((x, y) => (x.assignedAt ?? 0) - (y.assignedAt ?? 0)));
     return riders.sort((a, b) => b.parcels.length - a.parcels.length || a.name.localeCompare(b.name));
 };
+
+/** How many parcels are on more than one active assignment. */
+export const duplicateCount = (riders: ActiveRider[]) => riders.reduce((n, r) => n + r.parcels.filter((p) => p.alsoWith?.length).length, 0);
 
 /** "3 h ago", "2 days ago" — and whether it's been out long enough to chase. */
 export const sinceAssigned = (t?: number, now = Date.now()) => {

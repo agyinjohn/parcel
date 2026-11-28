@@ -172,6 +172,8 @@ export interface PayoutRequest {
     momoNumber?: string;
     momoReference?: string;
     note?: string;
+    /** The net total the staff member saw and is handing over; the server rejects with 409 if its own total differs. */
+    expectedNetAmount?: number;
 }
 
 export interface Page<T> {
@@ -233,6 +235,10 @@ class DriverPaymentsService {
     balances(params: { search?: string; state?: "READY" | "ALL" | "ON_HOLD"; page?: number; size?: number } = {}) {
         return this.call<Page<BalanceRow>>(() => this.api.get("/driver-balances", { params: { size: 50, ...params } }), "Couldn't load driver balances.");
     }
+    /**
+     * A driver's statement. `from` limits only the PAID history: every trip with an unpaid fee
+     * (waiting, ready or on hold) is always included, however old, so no money owed drops out of view.
+     */
     statement(driverId: string, from?: number, to?: number) {
         return this.call<Statement>(() => this.api.get(`/drivers/${encodeURIComponent(driverId)}/statement`, { params: { from, to } }), "Couldn't load the driver's statement.");
     }
@@ -276,8 +282,9 @@ class DriverPaymentsService {
     payout(id: string) {
         return this.call<DriverPayout>(() => this.api.get(`/driver-payouts/${encodeURIComponent(id)}`), "Couldn't load the payout.");
     }
-    pay(body: PayoutRequest) {
-        return this.call<DriverPayout>(() => this.api.post("/driver-payouts", body), "Couldn't record the payout.");
+    /** The Idempotency-Key makes a retry of the same payout return the first result instead of paying twice. */
+    pay(body: PayoutRequest, idempotencyKey?: string) {
+        return this.call<DriverPayout>(() => this.api.post("/driver-payouts", body, idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined), "Couldn't record the payout.");
     }
     sendCode(id: string) {
         return this.call<unknown>(() => this.api.post(`/driver-payouts/${encodeURIComponent(id)}/send-code`), "Couldn't send the code.");

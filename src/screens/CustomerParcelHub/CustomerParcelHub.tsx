@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/ui/toast";
 import { useCustomerAuth } from "../../contexts/CustomerAuthContext";
 import { useStation } from "../../contexts/StationContext";
-import { fetchOfficeNameMap, searchParcelsByPhone } from "../../services/customerService";
+import { fetchOfficeNameMap, openCustomerLink, searchParcelsByPhone, sendCustomerOtp, toApiPhone, verifyCustomerOtp } from "../../services/customerService";
 import { customerAuthService } from "../../services/customerAuthService";
 import { validatePhoneNumber } from "../../utils/dataHelpers";
 import { DeliveryRequestModal } from "./components/DeliveryRequestModal";
@@ -16,10 +16,8 @@ import { ReceiveFooter } from "./components/ReceiveFooter";
 import { TrackHeader } from "./components/TrackHeader";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { preloadGoogleIdentity, type GoogleCredentialPayload } from "../../utils/googleAuth";
-import { sendTrackOtp, verifyTrackOtp } from "./trackOtpMock";
 import {
   EnrichedParcel,
-  GpsCoordinates,
   TrackStep,
   DeliverySuccessInfo,
   DeliverySchedule,
@@ -48,7 +46,7 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [selectedParcel, setSelectedParcel] = useState<EnrichedParcel | null>(null);
   const [deliveryParcels, setDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
   const [pendingDeliveryParcels, setPendingDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
-  const [landingTab, setLandingTab] = useState<LandingTab>("account");
+  const [landingTab, setLandingTab] = useState<LandingTab>("find");
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [deliveryAuthPrompt, setDeliveryAuthPrompt] = useState(false);
   const [pendingGoogleProfile, setPendingGoogleProfile] = useState<GoogleCredentialPayload | null>(null);
@@ -62,6 +60,56 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
   const [error, setError] = useState("");
+  // Proof the customer holds the phone: from the SMS link (?t=...) or a verified one-time code.
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [otpReturnStep, setOtpReturnStep] = useState<TrackStep>("list");
+
+  // Opened from the landing page with a number: /receive?phone=0241234567 searches straight away.
+  const autoPhone = useRef<string | null>(new URLSearchParams(window.location.search).get("phone"));
+  useEffect(() => {
+    const ph = autoPhone.current;
+    if (!ph || new URLSearchParams(window.location.search).get("t")) return;
+    autoPhone.current = null;
+    const normalized = toApiPhone(ph);
+    if (validatePhoneNumber(normalized)) {
+      setPhone(normalized);
+      setSearchPending(true);
+    }
+  }, []);
+  const [searchPending, setSearchPending] = useState(false);
+  useEffect(() => {
+    if (searchPending && phone) { setSearchPending(false); void handleSearch(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchPending, phone]);
+
+  // Opened from the SMS: /receive?t=<token>[&parcel=<parcelId>]
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("t");
+    if (!token) return;
+    const wanted = params.get("parcel");
+    setLinkLoading(true);
+    openCustomerLink(token).then((r) => {
+      setLinkLoading(false);
+      if (!r.success) {
+        setLandingTab("find");
+        setError(r.message);
+        return;
+      }
+      const list = r.data.parcels.map((p) => enrichParcel(p));
+      setLinkToken(token);
+      setPhone(r.data.phoneNumber);
+      setParcels(list);
+      const one = list.find((p) => p.parcelId === wanted) ?? (list.length === 1 ? list[0] : null);
+      if (one) {
+        setSelectedParcel(one);
+        setStep("detail");
+      } else {
+        setStep("list");
+      }
+    });
+  }, []);
 
   useEffect(() => {
     preloadGoogleIdentity();
@@ -134,7 +182,7 @@ export const CustomerParcelHub = (): JSX.Element => {
     setDeliveryParcels(null);
     setPendingDeliveryParcels(null);
     setDeliveryAuthPrompt(false);
-    setLandingTab(isCustomerSignedIn ? "find" : "account");
+    setLandingTab("find");
     setSelectedDeliveryIds(new Set());
     setActionSuccess(null);
     setDeliverySuccess(null);
@@ -175,18 +223,7 @@ export const CustomerParcelHub = (): JSX.Element => {
       }
 
       setParcels(result.data.map(p => enrichParcel(p, officeNames)));
-      setOtp("");
-      setOtpSending(true);
-      const otpResult = await sendTrackOtp(phone);
-      setOtpSending(false);
-
-      if (!otpResult.success) {
-        setError(otpResult.message);
-        return;
-      }
-
-      showToast(otpResult.message, "success");
-      setStep("otp");
+      setStep("list");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
@@ -198,75 +235,72 @@ export const CustomerParcelHub = (): JSX.Element => {
   const handleResendOtp = async () => {
     setError("");
     setOtpSending(true);
-    const result = await sendTrackOtp(phone);
+    const result = await sendCustomerOtp(toApiPhone(phone));
     setOtpSending(false);
-    if (result.success) {
-      showToast("New verification code sent.", "success");
-    } else {
-      setError(result.message);
-    }
+    if (result.success) showToast("New code sent.", "success");
+    else setError(result.message);
   };
 
   const handleVerifyOtp = async () => {
     setError("");
     setOtpLoading(true);
     try {
-      const result = await verifyTrackOtp(phone, otp);
+      const result = await verifyCustomerOtp(toApiPhone(phone), otp);
       if (!result.success) {
         setError(result.message);
         return;
       }
-      showToast("Phone verified. You can now view your parcels.", "success");
-      setStep("list");
+      setLinkToken(result.data.token);
+      setStep(otpReturnStep);
+      if (pendingDeliveryParcels?.length) {
+        setDeliveryParcels(pendingDeliveryParcels);
+        setPendingDeliveryParcels(null);
+      }
     } finally {
       setOtpLoading(false);
     }
   };
 
-  const handleSelfPickup = () => {
-    setActionSuccess("pickup");
-    showToast("Branch notified that you're on your way.", "success");
-  };
-
-  const handleDeliverySubmit = (
-    coords: GpsCoordinates,
-    notes: string,
-    paystackReference: string,
-    schedule: DeliverySchedule | null,
-  ) => {
-    const count = deliveryParcels?.length ?? 0;
-    const scheduled = schedule != null;
+  /** The modal has taken payment and the backend accepted the request. */
+  const handleDeliverySubmit = (info: { requestId: string; paystackReference: string; schedule: DeliverySchedule | null }) => {
+    const ids = new Set((deliveryParcels ?? []).map(p => p.parcelId));
+    const count = ids.size;
     setDeliveryParcels(null);
     setSelectedDeliveryIds(new Set());
     setDeliverySuccess({
       parcelCount: count,
-      paystackReference,
-      scheduled,
-      scheduledAt: schedule ? formatDeliverySchedule(schedule) : undefined,
+      paystackReference: info.paystackReference,
+      scheduled: info.schedule != null,
+      scheduledAt: info.schedule ? formatDeliverySchedule(info.schedule) : undefined,
     });
+    // Show the booking straight away; the next search reads it from the server.
+    const booked = (p: EnrichedParcel) => (ids.has(p.parcelId) ? enrichParcel({ ...p, homeDelivery: true }, officeNames) : p);
+    setParcels(prev => prev.map(booked));
+    setSelectedParcel(prev => (prev ? booked(prev) : prev));
     if (step === "detail") setActionSuccess("delivery");
-
-    showToast(
-      scheduled
-        ? `Scheduled delivery booked for ${count} parcel${count !== 1 ? "s" : ""} · payment received.`
-        : `Payment successful · delivery requested for ${count} parcel${count !== 1 ? "s" : ""}.`,
-      "success",
-    );
-    void coords;
-    void notes;
+    showToast(`Delivery booked for ${count} parcel${count !== 1 ? "s" : ""}.`, "success");
   };
 
-  const openDeliveryModal = (items: EnrichedParcel[]) => {
+  const openDeliveryModal = async (items: EnrichedParcel[]) => {
     if (items.length === 0) return;
-    if (!isAuthenticated && !isCustomerSignedIn) {
-      setPendingDeliveryParcels(items);
-      setDeliveryAuthPrompt(true);
-      setStep("search");
-      setLandingTab("account");
-      setAuthMode("signin");
+    if (linkToken) {
+      setDeliveryParcels(items);
       return;
     }
-    setDeliveryParcels(items);
+    // Not opened from the SMS link: prove the phone first with a one-time code.
+    setError("");
+    setOtp("");
+    setOtpSending(true);
+    const sent = await sendCustomerOtp(toApiPhone(phone));
+    setOtpSending(false);
+    if (!sent.success) {
+      showToast(sent.message, "error");
+      return;
+    }
+    setPendingDeliveryParcels(items);
+    setOtpReturnStep(step);
+    setStep("otp");
+    showToast(`Code sent to ${maskPhone(phone)}.`, "success");
   };
 
   const handleAuthSuccess = () => {
@@ -276,13 +310,7 @@ export const CustomerParcelHub = (): JSX.Element => {
       setPhone(session.phone);
     }
     setLandingTab("find");
-    if (pendingDeliveryParcels?.length) {
-      setDeliveryParcels(pendingDeliveryParcels);
-      setPendingDeliveryParcels(null);
-      showToast("Signed in. Continue with delivery.", "success");
-    } else {
-      showToast("Welcome!", "success");
-    }
+    showToast("Welcome!", "success");
   };
 
   const handleBack = () => {
@@ -293,7 +321,12 @@ export const CustomerParcelHub = (): JSX.Element => {
       setStep("list");
       return;
     }
-    if (step === "list" || step === "otp") {
+    if (step === "otp") {
+      setPendingDeliveryParcels(null);
+      setStep(otpReturnStep);
+      return;
+    }
+    if (step === "list") {
       resetAll();
     }
   };
@@ -326,7 +359,11 @@ export const CustomerParcelHub = (): JSX.Element => {
       <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6">
         <PwaInstallBanner />
 
-        {step === "search" && (
+        {linkLoading && (
+          <p className="py-10 text-center text-sm text-slate-500">Opening your parcels…</p>
+        )}
+
+        {step === "search" && !linkLoading && (
           <CustomerReceiveLanding
             phone={phone}
             loading={searchLoading}
@@ -412,7 +449,6 @@ export const CustomerParcelHub = (): JSX.Element => {
             parcel={selectedParcel}
             actionSuccess={actionSuccess}
             deliverySuccess={deliverySuccess}
-            onSelfPickup={handleSelfPickup}
             onRequestDelivery={() => openDeliveryModal([selectedParcel])}
           />
         )}
@@ -430,7 +466,8 @@ export const CustomerParcelHub = (): JSX.Element => {
       {deliveryParcels && deliveryParcels.length > 0 && (
         <DeliveryRequestModal
           parcels={deliveryParcels}
-          customerPhone={phone}
+          customerPhone={toApiPhone(phone)}
+          token={linkToken ?? undefined}
           customerEmail={customer?.email}
           onClose={() => setDeliveryParcels(null)}
           onSubmit={handleDeliverySubmit}

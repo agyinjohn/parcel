@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { BrandMark } from "../../components/BrandMark";
 import {
     ArrowRight, BarChart3, Bike, Building2, CheckCircle2, ClipboardList,
     Headphones, LayoutDashboard, MapPin, Menu, Package, PackageSearch,
     Palette, PhoneCall, Quote, Search, ShieldCheck, Store, Truck,
-    TrendingUp, Users, Wallet, X, Zap,
+    TrendingUp, Users, Wallet, X, Zap, Handshake, LogIn, Home,
 } from "lucide-react";
 
 const ORANGE = "#ea690c";
@@ -39,13 +40,84 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
 );
 
 const Logo = () => (
-    <div className="flex items-center gap-2.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ea690c] to-[#c2470a] shadow-lg shadow-orange-200">
-            <Package className="h-5 w-5 text-white" />
-        </div>
-        <span className="text-lg font-bold tracking-tight text-neutral-900">ParcelFlow</span>
-    </div>
+    <Link to="/" aria-label="ParcelFlow home"><BrandMark /></Link>
 );
+
+/* ── For customers and partners: track, receive, partner ─────── */
+
+const CustomerPartnerSection = () => {
+    const navigate = useNavigate();
+    const [phone, setPhone] = useState("");
+    const digits = phone.replace(/\D/g, "");
+    const valid = digits.length >= 9 && digits.length <= 12;
+    const track = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (valid) navigate(`/receive?phone=${encodeURIComponent(phone.trim())}`);
+    };
+    return (
+        <section id="customers" className="relative border-b border-neutral-200/70 bg-white py-16 sm:py-20">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div className="mx-auto max-w-2xl text-center">
+                    <SectionLabel>For customers and partners</SectionLabel>
+                    <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Sending or expecting a parcel?</h2>
+                    <p className="mt-3 text-neutral-500">No account needed to track. Partners send parcels to any of our stations and get paid when customers collect.</p>
+                </div>
+                <div className="mt-10 grid gap-5 lg:grid-cols-3">
+                    {/* Track */}
+                    <div className="flex flex-col rounded-2xl border border-neutral-200 bg-[#fbfaf8] p-6">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100 text-[#ea690c]"><PackageSearch className="h-5 w-5" /></div>
+                        <h3 className="mt-4 text-lg font-bold">Track a parcel</h3>
+                        <p className="mt-1 text-sm text-neutral-500">See where it is, which station has it, and what to pay.</p>
+                        <form onSubmit={track} className="mt-5 flex gap-2">
+                            <div className="relative flex-1">
+                                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-neutral-400">+233</span>
+                                <input
+                                    aria-label="Phone number on the parcel"
+                                    inputMode="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="24 123 4567"
+                                    className="h-11 w-full rounded-xl border border-neutral-300 bg-white pl-14 pr-3 text-sm outline-none focus:border-[#ea690c] focus:ring-2 focus:ring-orange-100"
+                                />
+                            </div>
+                            <button type="submit" disabled={!valid} className="h-11 rounded-xl bg-[#ea690c] px-4 text-sm font-semibold text-white disabled:opacity-50">Track</button>
+                        </form>
+                        <Link to="/receive" className="mt-3 text-xs font-medium text-[#ea690c] hover:underline">Or open the tracking page →</Link>
+                    </div>
+                    {/* Receive */}
+                    <div className="flex flex-col rounded-2xl border border-neutral-200 bg-[#fbfaf8] p-6">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-[#1e40af]"><Home className="h-5 w-5" /></div>
+                        <h3 className="mt-4 text-lg font-bold">Get it delivered to your door</h3>
+                        <p className="mt-1 text-sm text-neutral-500">Got an SMS that your parcel arrived? Pick a spot on the map, pay online, and a rider brings it to you.</p>
+                        <ul className="mt-4 space-y-1.5 text-sm text-neutral-600">
+                            {["Open the link in your SMS, or search with your phone", "Drop a pin where we should deliver", "Pay by mobile money or card"].map((t) => (
+                                <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />{t}</li>
+                            ))}
+                        </ul>
+                        <Link to="/receive" className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 transition-colors hover:bg-neutral-50">
+                            Request delivery <ArrowRight className="h-4 w-4" />
+                        </Link>
+                    </div>
+                    {/* Partners */}
+                    <div className="flex flex-col rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ea690c] text-white"><Store className="h-5 w-5" /></div>
+                        <h3 className="mt-4 text-lg font-bold">Partners and online shops</h3>
+                        <p className="mt-1 text-sm text-neutral-500">Register parcels online, drop them at a station, and track every delivery and payment in your partner portal.</p>
+                        <ul className="mt-4 space-y-1.5 text-sm text-neutral-600">
+                            {["Send one parcel or a whole batch", "Cash collected on delivery, paid back to you", "Live status for every parcel"].map((t) => (
+                                <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />{t}</li>
+                            ))}
+                        </ul>
+                        <div className="mt-5 flex gap-2">
+                            <Link to="/partner/apply" className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#ea690c] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#ff7a1a]"><Handshake className="h-4 w-4" />Become a partner</Link>
+                            <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-50"><LogIn className="h-4 w-4" />Sign in</Link>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+};
 
 /* ── Hero dashboard mockup (light, tilted 3D) ────────────────── */
 
@@ -226,6 +298,7 @@ export const Landing = (): JSX.Element => {
         { label: "Features", href: "#features" },
         { label: "How it works", href: "#how-it-works" },
         { label: "Pricing", href: "#pricing" },
+        { label: "Partners", href: "#customers" },
     ];
 
     return (
@@ -243,6 +316,9 @@ export const Landing = (): JSX.Element => {
                         ))}
                     </div>
                     <div className="hidden items-center gap-3 md:flex">
+                        <Link to="/receive" className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 transition-colors hover:border-[#ea690c] hover:text-[#ea690c]">
+                            <PackageSearch className="h-4 w-4" />Track a parcel
+                        </Link>
                         <Link to="/login" className="rounded-lg px-4 py-2 text-sm font-semibold text-neutral-600 transition-colors hover:text-neutral-900">
                             Log in
                         </Link>
@@ -264,6 +340,9 @@ export const Landing = (): JSX.Element => {
                                 {l.label}
                             </a>
                         ))}
+                        <Link to="/receive" onClick={() => setMenuOpen(false)} className="mt-2 flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-semibold text-neutral-700">
+                            <PackageSearch className="h-4 w-4" />Track a parcel
+                        </Link>
                         <div className="mt-3 flex gap-3">
                             <Link to="/login" className="flex-1 rounded-lg border border-neutral-300 px-4 py-2.5 text-center text-sm font-semibold text-neutral-700">
                                 Log in
@@ -395,6 +474,9 @@ export const Landing = (): JSX.Element => {
                     </div>
                 </div>
             </section>
+
+            {/* ══ For customers and partners ══ */}
+            <CustomerPartnerSection />
 
             {/* ══ 2. SOCIAL PROOF ══ */}
             <section className="border-b border-neutral-200/70 bg-white">
@@ -839,17 +921,19 @@ export const Landing = (): JSX.Element => {
                                 entire delivery operation in one place.
                             </p>
                         </div>
-                        {[
-                            { heading: "Product", links: ["Parcel Hub", "Delivery Hub", "Rider App", "Partner Portal"] },
-                            { heading: "Company", links: ["About", "Careers", "Contact", "Blog"] },
-                            { heading: "Resources", links: ["Help Center", "Track a Parcel", "API Docs", "Status"] },
-                        ].map(({ heading, links }) => (
+                        {([
+                            { heading: "Customers", links: [["Track a parcel", "/receive"], ["Request delivery", "/receive"]] },
+                            { heading: "Partners", links: [["Become a partner", "/partner/apply"], ["Partner sign in", "/login"]] },
+                            { heading: "Businesses", links: [["Product", "#workspaces"], ["Pricing", "#pricing"], ["Start free trial", "/signup"], ["Log in", "/login"]] },
+                        ] as { heading: string; links: [string, string][] }[]).map(({ heading, links }) => (
                             <div key={heading}>
                                 <h4 className="text-sm font-bold text-neutral-900">{heading}</h4>
                                 <ul className="mt-4 space-y-2.5">
-                                    {links.map(l => (
-                                        <li key={l}>
-                                            <a href="#" className="text-sm text-neutral-500 transition-colors hover:text-neutral-900">{l}</a>
+                                    {links.map(([label, to]) => (
+                                        <li key={label}>
+                                            {to.startsWith("#")
+                                                ? <a href={to} className="text-sm text-neutral-500 transition-colors hover:text-neutral-900">{label}</a>
+                                                : <Link to={to} className="text-sm text-neutral-500 transition-colors hover:text-neutral-900">{label}</Link>}
                                         </li>
                                     ))}
                                 </ul>
@@ -861,7 +945,7 @@ export const Landing = (): JSX.Element => {
                         <div className="flex items-center gap-5 text-xs text-neutral-400">
                             <a href="#" className="transition-colors hover:text-neutral-700">Terms</a>
                             <a href="#" className="transition-colors hover:text-neutral-700">Privacy</a>
-                            <Link to="/track" className="transition-colors hover:text-neutral-700">Track a parcel</Link>
+                            <Link to="/receive" className="transition-colors hover:text-neutral-700">Track a parcel</Link>
                         </div>
                     </div>
                 </div>

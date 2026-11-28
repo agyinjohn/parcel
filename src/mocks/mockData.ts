@@ -124,6 +124,7 @@ export const DEMO_ACCOUNTS: Record<string, { name: string; role: string; email: 
     "0200000004": { name: "Esi Addo", role: "CALLCENTER", email: "caller@demo.parcelflow" },
     "0200000005": { name: "Kwame Asante", role: "RIDER", email: "rider@demo.parcelflow" },
     "0200000006": { name: "Nana Osei", role: "SUPERADMIN", email: "super@demo.parcelflow" },
+    "0200000007": { name: "Glow Beauty Shop", role: "VENDOR", email: "partner@demo.parcelflow" },
 };
 
 // ── Riders ──────────────────────────────────────────────────────

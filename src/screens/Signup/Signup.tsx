@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
     AlertCircle, ArrowLeft, ArrowRight, Building2, CheckCircle2, Eye, EyeOff,
-    Loader, Lock, Mail, MapPin, Package, Phone, User,
+    Loader, Lock, Mail, MapPin, Phone, User,
 } from "lucide-react";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { cn } from "../../lib/utils";
 import companyService from "../../services/companyService";
+import { BrandMark } from "../../components/BrandMark";
 
 const ORANGE = "#ea690c";
 const BLUE = "#1e40af";
@@ -161,11 +162,8 @@ export const Signup = (): JSX.Element => {
                     style={{ background: `radial-gradient(circle, ${BLUE}, transparent 70%)` }}
                 />
 
-                <Link to="/" className="relative flex w-fit items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ea690c] to-[#c2470a] shadow-lg shadow-orange-200">
-                        <Package className="h-5 w-5 text-white" />
-                    </div>
-                    <span className="text-lg font-bold tracking-tight">ParcelFlow</span>
+                <Link to="/" className="relative flex w-fit items-center">
+                    <BrandMark />
                 </Link>
 
                 <div className="relative">
@@ -219,11 +217,8 @@ export const Signup = (): JSX.Element => {
                     <Link to="/" className="flex items-center gap-2 text-sm font-medium text-neutral-500 transition-colors hover:text-neutral-800">
                         <ArrowLeft className="h-4 w-4" /> Back
                     </Link>
-                    <Link to="/" className="flex items-center gap-2 lg:hidden">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ea690c]">
-                            <Package className="h-4 w-4 text-white" />
-                        </div>
-                        <span className="text-base font-bold text-neutral-900">ParcelFlow</span>
+                    <Link to="/" className="flex items-center lg:hidden">
+                        <BrandMark size="sm" />
                     </Link>
                     <p className="hidden text-sm text-neutral-500 sm:block">
                         Already have an account?{" "}
