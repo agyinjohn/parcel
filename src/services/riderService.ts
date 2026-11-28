@@ -414,22 +414,24 @@ class RiderService {
         assignmentId: string,
         status: AssignmentStatus,
         confirmationCode?: string,
-
         reason?: string,
-
+        paymentMethod?: string,
+        parcelId?: string,
     ): Promise<ApiResponse> {
         try {
+            // DeliveryStatusUpdateRequest: status, returnReason, confirmationCode, payementMethod (sic), parcelId
             const requestBody: UpdateAssignmentStatusRequest = {
                 status,
+                ...(parcelId ? { parcelId } : {}),
             };
 
-            if (status === "DELIVERED" && confirmationCode) {
-                requestBody.confirmationCode = confirmationCode;
+            if (status === "DELIVERED") {
+                if (confirmationCode) requestBody.confirmationCode = confirmationCode;
+                if (paymentMethod) requestBody.payementMethod = paymentMethod;
             }
 
             if (status === "RETURNED" && reason) {
-                requestBody.cancelationReason = reason;
-
+                requestBody.returnReason = reason;
             }
 
             const response = await this.apiClient.put<{ message: string }>(

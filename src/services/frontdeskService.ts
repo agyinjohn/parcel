@@ -726,6 +726,29 @@ class FrontdeskService {
      * Endpoint: GET /parcel-assignment
      * Now returns assignments with parcels array
      */
+    /**
+     * Every assignment still out with a rider (ASSIGNED, ACCEPTED, PICKED_UP), all pages.
+     * GET /parcel-assignment filters by status, so finished history isn't downloaded.
+     */
+    async getActiveAssignments(): Promise<ApiResponse & { data?: any[] }> {
+        try {
+            const statuses = ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'];
+            const lists = await Promise.all(statuses.map(async (status) => {
+                const all: any[] = [];
+                for (let page = 0; page < 50; page++) {
+                    const r = await this.apiClient.get<any>(`/parcel-assignment?status=${status}&page=${page}&size=200`);
+                    const content = r.data?.content ?? (Array.isArray(r.data) ? r.data : []);
+                    all.push(...content);
+                    if (r.data?.last !== false || content.length === 0) break;
+                }
+                return all;
+            }));
+            return { success: true, message: 'OK', data: lists.flat() };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load active deliveries.' };
+        }
+    }
+
     async getParcelAssignments(page: number = 0, size: number = 200): Promise<ApiResponse> {
         try {
             const params = new URLSearchParams();

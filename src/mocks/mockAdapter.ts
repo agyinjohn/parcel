@@ -570,18 +570,21 @@ on("get", /^\/api-rider\/assignments$/, ({ params }) =>
 on("put", /^\/api-rider\/(?:manager\/)?assignments\/([^/]+)\/status$/, ({ match, body }) => {
     const a = ASSIGNMENTS.find((x) => x.assignmentId === match[1]);
     if (!a) return ok();
-    a.status = body?.status ?? a.status;
     if (body?.returnReason) a.returnReason = body.returnReason;
     if (body?.status === "DELIVERED" || body?.status === "RETURNED") {
-        a.completedAt = Date.now();
-        a.paymentMethod = body?.payementMethod;
-        a.parcels.forEach((p) => {
+        a.paymentMethod = body?.payementMethod ?? a.paymentMethod;
+        // With a parcelId only that parcel is closed; the assignment finishes when none are left.
+        const targets = body?.parcelId ? a.parcels.filter((p) => p.parcelId === body.parcelId) : a.parcels;
+        const open = a.parcels.filter((p) => !p.delivered && !p.returned && !targets.includes(p));
+        if (open.length === 0) { a.status = body.status; a.completedAt = Date.now(); }
+        targets.forEach((p) => {
             p.parcelAssigned = false;
             p.delivered = body.status === "DELIVERED";
             p.returned = body.status === "RETURNED";
             p.deliveryDate = Date.now();
         });
     }
+    else a.status = body?.status ?? a.status;
     return serializeAssignment(a);
 });
 on("put", /^\/api-rider\/rider-status$/, () => ok("Status updated"));
