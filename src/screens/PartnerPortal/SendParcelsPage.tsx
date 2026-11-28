@@ -204,14 +204,20 @@ export const SendParcelsPage = () => {
 
 
 
-    for (const entry of toSubmit) {
+    for (let i = 0; i < toSubmit.length; i++) {
 
-      const result = await vendorService.submitParcel(formToPayload(entry));
+      const result = await vendorService.submitParcel(formToPayload(toSubmit[i]));
 
       if (!result.success || !result.data?.parcelId) {
-
-        setSubmitError(result.message);
-        showToast(result.message || "Failed to save parcel. Please try again.", "error");
+        // The ones before this were registered: take them out of the batch so a retry doesn't
+        // register them twice, and tell the partner their tracking IDs.
+        const failedName = toSubmit[i].receiverName || `parcel ${i + 1}`;
+        const msg = ids.length
+          ? `${ids.length} parcel${ids.length > 1 ? "s were" : " was"} saved (${ids.join(", ")}). The parcel for ${failedName} wasn't: ${result.message} Fix it and submit the remaining ${toSubmit.length - ids.length}.`
+          : result.message || "Failed to save parcel. Please try again.";
+        if (bulkMode && ids.length) setBatch(toSubmit.slice(i));
+        setSubmitError(msg);
+        showToast(msg, "error");
         setSubmitting(false);
 
         return;

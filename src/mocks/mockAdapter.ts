@@ -11,6 +11,7 @@ import {
 import API_BASE_URL from "../config/api";
 import { registerDriverPayments, driverCashOn } from "./driverPaymentsMock";
 import { registerCustomer } from "./customerMock";
+import { registerVendor } from "./vendorMock";
 import { DEFAULT_PRICE_TABLE, estimateRoadKm, quoteFromTable, type DeliveryPriceTable } from "../utils/deliveryPricing";
 import { analyzeOffTask, checkDeliveries, normalizePoints, summarize, type DeliveryStop } from "../screens/RiderMap/trackUtils";
 
@@ -280,6 +281,7 @@ on("post", /^\/api-frontdesk\/delivery-pricing\/quote$/, ({ body }) => {
     if (!Number.isFinite(body?.latitude) || !Number.isFinite(body?.longitude)) throw { status: 400, message: "latitude and longitude are required" };
     return mockDeliveryQuote(HOME_OFFICE.id, body.latitude, body.longitude, body.weightKg, body.fragile);
 });
+registerVendor(on, { parcels: PARCELS, offices: OFFICES, page, serialize: serializeParcel });
 registerCustomer(on, { parcels: PARCELS, offices: OFFICES, serialize: serializeParcel, quote: (officeId: string, lat: number, lng: number, kg?: number) => mockDeliveryQuote(officeId, lat, lng, kg).price });
 
 // Everything through the drawer for a day: counter takings in, driver cash payouts and advances out.

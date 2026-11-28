@@ -11,6 +11,7 @@ Work in this order:
 5a. **New:** never give a rider the same parcel twice.
 5b. **New:** customer pages (tracking, SMS link, delivery requests), including a data leak to fix now.
 5c. **New:** distance-based delivery pricing (station price tables, quotes, new parcel fields).
+5d. **New:** partner portal gaps (edit endpoint, station list access, duplicate protection).
 6. **Release to production.**
 7. **Next features**, which are planned.
 
@@ -295,6 +296,20 @@ A weekly job, per station, over delivered parcels that have a distance:
 - a proposed new table.
 
 Admins review the proposal on a new page and approve it, which creates a new table version. Details when we get there.
+
+---
+
+## 5d. Partner (vendor) portal gaps (new)
+
+The partner portal uses the four `/api-vendor` endpoints on backend-test: submit a parcel, list parcels, the status dashboard and earnings. With sample data the whole flow works: send one parcel or a batch, track, reconciliation, history. Demo login in `npm run dev:mock`: `0200000007`.
+
+Missing on the backend:
+- **Edit a parcel:** `PUT /api-vendor/parcels/{parcelId}` with the same body as `POST /api-vendor/parcels`.
+  - Only while the parcel is still `PENDING` (not yet received at the station), and only by the partner who sent it. Otherwise 409 or 403.
+  - The portal already has the Edit button. Until this exists, it tells the partner to call the station.
+- **Station list for partners:** the portal fills "Destination station" from `GET /api/offices/locations`. Please confirm a `VENDOR` token can read it, limited to the partner's company. It's 403 without a login.
+- **Duplicate submits:** accept an `Idempotency-Key` header on `POST /api-vendor/parcels`, so a request retried after a timeout doesn't register the parcel twice. Also reject the same `barCode` from the same partner within 24 hours with 409.
+- **Delivery location (optional, recommended):** add `receiverLatitude`, `receiverLongitude`, `receiverLocationName`, `receiverPlaceId` and `receiverLocationSource` to `VendorParcelRequest`. Then partner parcels get a map pin for riders and a distance-based price (5c) like our own parcels.
 
 ---
 

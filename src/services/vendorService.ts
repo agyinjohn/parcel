@@ -254,6 +254,11 @@ class VendorService {
             const response = await this.apiClient.put<ApiParcel>(`/parcels/${parcelId}`, payload);
             return { success: true, message: 'Parcel updated successfully', data: response.data };
         } catch (error: any) {
+            const status = error.response?.status;
+            // The backend has no edit endpoint yet (PUT /api-vendor/parcels/{id}; docs/BACKEND_TODO.md).
+            if (status === 404 || status === 405) {
+                return { success: false, message: "Editing parcels isn't available yet. Please call the station to change this parcel." };
+            }
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to update parcel. Please try again.',
