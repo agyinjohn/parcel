@@ -14,11 +14,11 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["logo-1.png"],
+      includeAssets: ["parcelflow-icon.svg", "parcelflow-icon-192.png", "apple-touch-icon.png"],
       manifest: {
-        name: "M&M Receive",
-        short_name: "M&M Receive",
-        description: "Track and receive your M&M parcels",
+        name: "ParcelFlow: track and receive parcels",
+        short_name: "ParcelFlow",
+        description: "Track your parcels from any ParcelFlow delivery company, and book delivery to your door",
         theme_color: "#ea690c",
         background_color: "#ffffff",
         display: "standalone",
@@ -27,19 +27,19 @@ export default defineConfig({
         scope: "/",
         icons: [
           {
-            src: "/logo-1.png",
+            src: "/parcelflow-icon-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/logo-1.png",
+            src: "/parcelflow-icon-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "/logo-1.png",
+            src: "/parcelflow-icon-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

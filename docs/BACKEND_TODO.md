@@ -165,6 +165,11 @@ The customer page is `/receive` (`/track` now opens it too). It's rebuilt to sho
             "phoneNumber": "+233...", "latitude": 5.5571, "longitude": -0.2058, "openingHours": "Mon–Sat, 8am–6pm" }
 ```
 
+**The portal is for every company, not one.** `/receive` is ParcelFlow-branded and serves all companies (tenants) and their stations:
+- **Search across companies:** the phone search, the SMS link and the code must look across **all** companies, not just one (no company filter from the domain or a token).
+- **Name the company:** add `"companyName"` (and `"companyLogoUrl"` if set) to each parcel in the customer view, so the page can say "Sent through M&M Delivery · Accra Central".
+- **Price by company:** delivery quotes and requests use each parcel's own company and station.
+
 Do the same for `GET /api-tracking/{parcelId}/track`, which today returns only status and dates, with `fromOfficeName` and `toOfficeName` both null.
 
 ### The SMS link

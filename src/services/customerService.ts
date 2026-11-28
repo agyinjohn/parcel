@@ -58,6 +58,9 @@ export interface CustomerParcel {
     imageUrls?: string[] | null;
     /** Station holding the parcel (proposed: public office details on the customer view). */
     office?: PublicOffice | null;
+    /** The company (tenant) the parcel belongs to: the portal serves all of them. */
+    companyName?: string | null;
+    companyLogoUrl?: string | null;
 }
 
 export interface PublicOffice {
@@ -77,6 +80,8 @@ export const normalizeCustomerParcel = (raw: any): CustomerParcel => ({
     itemCost: raw.itemCost ?? raw.ItemCost ?? 0,
     recieverPhoneNumber: raw.recieverPhoneNumber ?? raw.receiverPhoneNumber ?? null,
     officeName: raw.officeName ?? raw.office?.name ?? null,
+    companyName: raw.companyName ?? raw.company?.name ?? null,
+    companyLogoUrl: raw.companyLogoUrl ?? raw.company?.logoUrl ?? null,
     parcelImageUrl: raw.parcelImageUrl ?? (Array.isArray(raw.imageUrls) ? raw.imageUrls[0] : null) ?? null,
 });
 

@@ -47,7 +47,7 @@ export const ParcelListStep = ({
     <div className="space-y-4 animate-in fade-in duration-300 pb-28">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-neutral-800">Your parcels</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-neutral-900">Your parcels</h1>
           <p className="text-sm text-slate-600 mt-1">
             {sorted.length} result{sorted.length !== 1 ? "s" : ""} for {phone}
             {readyCount > 0 && (
@@ -93,7 +93,7 @@ export const ParcelListStep = ({
       </div>
 
       {selectedParcels.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 py-3">
+        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
           <div className="max-w-lg mx-auto">
             <p className="text-xs text-slate-500 text-center mb-2">
               {selectedParcels.length} parcel{selectedParcels.length !== 1 ? "s" : ""} · one delivery, one payment

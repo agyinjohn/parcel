@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { BrandMark } from "../../components/BrandMark";
 import {
   PhoneIcon,
   LockIcon,
@@ -224,12 +225,9 @@ export const Login = (): JSX.Element => {
 
         {/* logo */}
         <div className="relative flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white p-2 shadow-md">
-            <img src="/logo-1.png" alt="M&M Logo" className="h-full w-full object-contain" />
-          </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-neutral-900">Mealex &amp; Mailex</h1>
-            <p className="text-sm text-neutral-500">Parcel Delivery System</p>
+            <BrandMark size="lg" />
+            <p className="mt-1 text-sm text-neutral-500">Sign in to your company's workspace</p>
           </div>
         </div>
 
@@ -281,12 +279,9 @@ export const Login = (): JSX.Element => {
         <div className="mx-auto w-full max-w-md min-w-0">
           {/* Mobile logo */}
           <div className="mb-8 flex items-center gap-3 min-w-0 lg:hidden">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-md sm:h-14 sm:w-14">
-              <img src="/logo-1.png" alt="M&M Logo" className="h-full w-full object-contain" />
-            </div>
             <div className="min-w-0">
-              <h1 className="text-lg font-bold leading-tight text-neutral-900 sm:text-xl">Mealex &amp; Mailex</h1>
-              <p className="text-xs text-gray-500 sm:text-sm">Parcel Delivery System</p>
+              <BrandMark />
+              <p className="mt-1 text-xs text-gray-500 sm:text-sm">Sign in to your company's workspace</p>
             </div>
           </div>
 

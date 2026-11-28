@@ -1,21 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/ui/toast";
-import { useCustomerAuth } from "../../contexts/CustomerAuthContext";
-import { useStation } from "../../contexts/StationContext";
 import { fetchOfficeNameMap, openCustomerLink, searchParcelsByPhone, sendCustomerOtp, toApiPhone, verifyCustomerOtp } from "../../services/customerService";
-import { customerAuthService } from "../../services/customerAuthService";
 import { validatePhoneNumber } from "../../utils/dataHelpers";
 import { DeliveryRequestModal } from "./components/DeliveryRequestModal";
-import { CustomerReceiveLanding, type LandingTab } from "./components/CustomerReceiveLanding";
-import type { AuthMode } from "./components/CustomerEmailAuthForm";
-import { LinkPhoneModal } from "./components/LinkPhoneModal";
+import { CustomerReceiveLanding } from "./components/CustomerReceiveLanding";
 import { OtpVerifyStep } from "./components/OtpVerifyStep";
 import { ParcelDetailView, type ParcelActionSuccess } from "./components/ParcelDetailView";
 import { ParcelListStep } from "./components/ParcelListStep";
 import { ReceiveFooter } from "./components/ReceiveFooter";
 import { TrackHeader } from "./components/TrackHeader";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
-import { preloadGoogleIdentity, type GoogleCredentialPayload } from "../../utils/googleAuth";
 import {
   EnrichedParcel,
   TrackStep,
@@ -28,16 +22,18 @@ import {
 } from "./trackParcelUtils";
 
 const HEADER_SUBTITLES: Record<TrackStep, string> = {
-  search: "Receive",
-  otp: "Verify",
-  list: "Parcels",
-  detail: "Details",
+  search: "",
+  otp: "Verify your phone",
+  list: "Your parcels",
+  detail: "Parcel details",
 };
 
+/**
+ * Public customer portal (/receive): track parcels by phone, open the SMS link, book delivery.
+ * ParcelFlow-branded: it serves every company (tenant) and station; each parcel shows its own company.
+ */
 export const CustomerParcelHub = (): JSX.Element => {
   const { showToast } = useToast();
-  const { isAuthenticated } = useStation();
-  const { isCustomerSignedIn, customer, signOutCustomer, completeGoogleSignIn } = useCustomerAuth();
 
   const [step, setStep] = useState<TrackStep>("search");
   const [phone, setPhone] = useState("");
@@ -46,11 +42,6 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [selectedParcel, setSelectedParcel] = useState<EnrichedParcel | null>(null);
   const [deliveryParcels, setDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
   const [pendingDeliveryParcels, setPendingDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
-  const [landingTab, setLandingTab] = useState<LandingTab>("find");
-  const [authMode, setAuthMode] = useState<AuthMode>("signin");
-  const [deliveryAuthPrompt, setDeliveryAuthPrompt] = useState(false);
-  const [pendingGoogleProfile, setPendingGoogleProfile] = useState<GoogleCredentialPayload | null>(null);
-  const [googleLinkLoading, setGoogleLinkLoading] = useState(false);
   const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Set<string>>(new Set());
   const [actionSuccess, setActionSuccess] = useState<ParcelActionSuccess>(null);
   const [deliverySuccess, setDeliverySuccess] = useState<DeliverySuccessInfo>(null);
@@ -64,6 +55,7 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [otpReturnStep, setOtpReturnStep] = useState<TrackStep>("list");
+  const [searchPending, setSearchPending] = useState(false);
 
   // Opened from the landing page with a number: /receive?phone=0241234567 searches straight away.
   const autoPhone = useRef<string | null>(new URLSearchParams(window.location.search).get("phone"));
@@ -77,7 +69,6 @@ export const CustomerParcelHub = (): JSX.Element => {
       setSearchPending(true);
     }
   }, []);
-  const [searchPending, setSearchPending] = useState(false);
   useEffect(() => {
     if (searchPending && phone) { setSearchPending(false); void handleSearch(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,7 +84,6 @@ export const CustomerParcelHub = (): JSX.Element => {
     openCustomerLink(token).then((r) => {
       setLinkLoading(false);
       if (!r.success) {
-        setLandingTab("find");
         setError(r.message);
         return;
       }
@@ -112,9 +102,7 @@ export const CustomerParcelHub = (): JSX.Element => {
   }, []);
 
   useEffect(() => {
-    preloadGoogleIdentity();
     fetchOfficeNameMap().then(setOfficeNames);
-
     import("virtual:pwa-register").then(({ registerSW }) => {
       registerSW({ immediate: true });
     });
@@ -126,52 +114,8 @@ export const CustomerParcelHub = (): JSX.Element => {
     setSelectedParcel(prev => (prev ? enrichParcel(prev, officeNames) : null));
   }, [officeNames]);
 
-  useEffect(() => {
-    if (customer?.phone && validatePhoneNumber(customer.phone) && !phone) {
-      setPhone(customer.phone);
-    }
-  }, [customer, phone]);
-
-  const focusAccountTab = (mode: AuthMode = "signin") => {
-    setStep("search");
-    setLandingTab("account");
-    setAuthMode(mode);
-  };
-
-  const finishGoogleSignIn = (profile: GoogleCredentialPayload, linkedPhone: string) => {
-    const result = completeGoogleSignIn({
-      name: profile.name,
-      email: profile.email,
-      pictureUrl: profile.picture,
-      phone: linkedPhone,
-    });
-    if (result.success) {
-      setPhone(linkedPhone);
-      setPendingGoogleProfile(null);
-      return true;
-    }
-    showToast(result.message, "error");
-    return false;
-  };
-
-  const handleGoogleSuccess = (profile: GoogleCredentialPayload) => {
-    if (validatePhoneNumber(phone)) {
-      if (finishGoogleSignIn(profile, phone)) {
-        handleAuthSuccess();
-      }
-      return;
-    }
-    setPendingGoogleProfile(profile);
-  };
-
-  const handleLinkPhoneSubmit = (linkedPhone: string) => {
-    if (!pendingGoogleProfile) return;
-    setGoogleLinkLoading(true);
-    if (finishGoogleSignIn(pendingGoogleProfile, linkedPhone)) {
-      handleAuthSuccess();
-    }
-    setGoogleLinkLoading(false);
-  };
+  // Each step starts at the top of the screen.
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [step]);
 
   const resetAll = () => {
     setStep("search");
@@ -181,8 +125,6 @@ export const CustomerParcelHub = (): JSX.Element => {
     setSelectedParcel(null);
     setDeliveryParcels(null);
     setPendingDeliveryParcels(null);
-    setDeliveryAuthPrompt(false);
-    setLandingTab("find");
     setSelectedDeliveryIds(new Set());
     setActionSuccess(null);
     setDeliverySuccess(null);
@@ -303,16 +245,6 @@ export const CustomerParcelHub = (): JSX.Element => {
     showToast(`Code sent to ${maskPhone(phone)}.`, "success");
   };
 
-  const handleAuthSuccess = () => {
-    setDeliveryAuthPrompt(false);
-    const session = customerAuthService.getSession();
-    if (session?.phone && validatePhoneNumber(session.phone)) {
-      setPhone(session.phone);
-    }
-    setLandingTab("find");
-    showToast("Welcome!", "success");
-  };
-
   const handleBack = () => {
     if (step === "detail") {
       setSelectedParcel(null);
@@ -339,24 +271,9 @@ export const CustomerParcelHub = (): JSX.Element => {
         onBack={step !== "search" ? handleBack : undefined}
         backLabel={backLabel}
         subtitle={HEADER_SUBTITLES[step]}
-        customerAccount={
-          !isAuthenticated
-            ? {
-                isSignedIn: isCustomerSignedIn,
-                name: customer?.name,
-                pictureUrl: customer?.pictureUrl,
-                onSignUp: () => focusAccountTab("signup"),
-                onSignIn: () => focusAccountTab("signin"),
-                onSignOut: () => {
-                  signOutCustomer();
-                  showToast("Signed out.", "info");
-                },
-              }
-            : undefined
-        }
       />
 
-      <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6">
+      <main className="mx-auto w-full max-w-xl flex-1 px-3 py-5 sm:px-4 sm:py-6">
         <PwaInstallBanner />
 
         {linkLoading && (
@@ -368,23 +285,11 @@ export const CustomerParcelHub = (): JSX.Element => {
             phone={phone}
             loading={searchLoading}
             error={error}
-            tab={landingTab}
-            onTabChange={setLandingTab}
-            authMode={authMode}
-            onAuthModeChange={setAuthMode}
-            isSignedIn={isCustomerSignedIn}
-            customerName={customer?.name}
-            customerEmail={customer?.email}
-            customerPicture={customer?.pictureUrl}
-            deliveryAuthPrompt={deliveryAuthPrompt}
-            pendingDeliveryCount={pendingDeliveryParcels?.length}
             onPhoneChange={value => {
               setPhone(value);
               setError("");
             }}
             onSubmit={handleSearch}
-            onGoogleSuccess={handleGoogleSuccess}
-            onAuthSuccess={handleAuthSuccess}
           />
         )}
 
@@ -454,21 +359,12 @@ export const CustomerParcelHub = (): JSX.Element => {
         )}
       </main>
 
-      {pendingGoogleProfile && (
-        <LinkPhoneModal
-          profile={pendingGoogleProfile}
-          loading={googleLinkLoading}
-          onClose={() => setPendingGoogleProfile(null)}
-          onSubmit={handleLinkPhoneSubmit}
-        />
-      )}
 
       {deliveryParcels && deliveryParcels.length > 0 && (
         <DeliveryRequestModal
           parcels={deliveryParcels}
           customerPhone={toApiPhone(phone)}
           token={linkToken ?? undefined}
-          customerEmail={customer?.email}
           onClose={() => setDeliveryParcels(null)}
           onSubmit={handleDeliverySubmit}
         />

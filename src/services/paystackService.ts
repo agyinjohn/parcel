@@ -44,12 +44,12 @@ function loadPaystackScript(): Promise<void> {
 }
 
 export function buildPaystackReference(): string {
-  return `MNM-DLV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `PF-DLV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function paystackEmailFromPhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
-  return `customer+${digits || "guest"}@mnm-delivery.local`;
+  return `customer+${digits || "guest"}@customers.parcelflow.local`;
 }
 
 export async function openPaystackPayment(params: {

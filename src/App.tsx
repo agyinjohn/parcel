@@ -66,7 +66,6 @@ import { DeliveryAccountability } from "./screens/Admin/DeliveryAccountability/D
 import { TenantManagement } from "./screens/Admin/TenantManagement/TenantManagement";
 import { CrossTenantAnalytics } from "./screens/Admin/CrossTenantAnalytics/CrossTenantAnalytics";
 import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
-import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
 import { OutgoingParcels } from "./screens/OutgoingParcels";
 import { IncomingParcels } from "./screens/IncomingParcels";
@@ -114,7 +113,7 @@ export const App = (): JSX.Element => {
                               <Route path="/track" element={<Navigate to="/receive" replace />} />
                               <Route path="/p/:parcelId" element={<ParcelScan />} />
                               <Route path="/scan" element={<ParcelScan />} />
-                              <Route path="/receive" element={<CustomerAuthProvider><CustomerParcelHub /></CustomerAuthProvider>} />
+                              <Route path="/receive" element={<CustomerParcelHub />} />
 
                               {/* ── Partner Portal ── */}
                               <Route path="/partner/apply" element={<PartnerApply />} />

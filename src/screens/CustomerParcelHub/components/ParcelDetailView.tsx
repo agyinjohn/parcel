@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { ParcelThumbnail } from "./ParcelThumbnail";
 import {
-  EnrichedParcel, STATUS_STYLES, chargeLines, formatTrackCurrency, formatTrackDateTime, getAmountToPay, getParcelTitle, isParcelArrived,
+  EnrichedParcel, STATUS_STYLES, chargeLines, formatTrackCurrency, formatTrackDateTime, getAmountToPay, getParcelImageUrl, getParcelTitle, isParcelArrived,
 } from "../trackParcelUtils";
 import type { DeliverySuccessInfo } from "../trackParcelUtils";
 
@@ -76,7 +76,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
   };
 
   return (
-    <div className="space-y-4 pb-28 animate-in fade-in duration-300">
+    <div className="space-y-3 pb-28 animate-in fade-in duration-300 sm:space-y-4">
       {actionSuccess === "delivery" && deliverySuccess && (
         <div className="flex gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <CheckCircle2 className="h-6 w-6 shrink-0 text-blue-600" />
@@ -92,13 +92,12 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
 
       {/* Status */}
       <Card className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
-        <ParcelThumbnail parcel={parcel} size="hero" className="rounded-none border-0 border-b border-slate-100" />
-        <CardContent className="space-y-4 p-5">
+        {getParcelImageUrl(parcel) && <ParcelThumbnail parcel={parcel} size="hero" className="rounded-none border-0 border-b border-slate-100" />}
+        <CardContent className="space-y-4 p-4 sm:p-5">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-bold leading-snug text-neutral-900">{title}</h1>
-              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[parcel.displayStatus]}`}>{parcel.statusLabel}</span>
-            </div>
+            <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[parcel.displayStatus]}`}>{parcel.statusLabel}</span>
+            <h1 className="mt-2 break-words text-xl font-extrabold leading-snug tracking-tight text-neutral-900">{title}</h1>
+            {parcel.companyName && <p className="mt-0.5 text-sm text-slate-500">Sent through <span className="font-semibold text-neutral-700">{parcel.companyName}</span></p>}
             <div className="mt-1.5 flex items-center gap-3">
               <button type="button" onClick={copyId} className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-500 hover:text-[#ea690c]">
                 {parcel.parcelId}{copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
@@ -137,6 +136,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
         <Section icon={Building2} title={parcel.displayStatus === "ready" ? "Where your parcel is" : "Where it's going"}>
           <div>
             <p className="font-semibold text-neutral-900">{parcel.branchName || "Station"}</p>
+            {parcel.companyName && <p className="text-xs text-slate-500">{parcel.companyName}</p>}
             {office?.address && <p className="text-sm text-slate-600">{office.address}</p>}
           </div>
           <div className="divide-y divide-slate-100">
@@ -201,7 +201,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
       </Section>
 
       {canRequestDelivery && (
-        <div className="safe-area-pb fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
           <div className="mx-auto flex max-w-lg gap-2">
             <Button type="button" onClick={onRequestDelivery} className="h-11 w-full rounded-xl bg-[#ea690c] text-white hover:bg-[#d45e0a]">
               <Truck className="mr-2 h-4 w-4" />
