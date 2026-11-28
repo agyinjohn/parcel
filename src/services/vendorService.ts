@@ -35,6 +35,13 @@ export interface VendorParcelRequest {
     itemCost?: number;
     itemQuantity?: number;
     pod?: boolean;
+    /** The backend's spelling; sent with `pod`. */
+    POD?: boolean;
+    receiverLatitude?: number;
+    receiverLongitude?: number;
+    receiverLocationName?: string;
+    receiverPlaceId?: string;
+    receiverLocationSource?: "SEARCH" | "MAP_PIN";
 }
 
 export interface ApiOfficeInfo {

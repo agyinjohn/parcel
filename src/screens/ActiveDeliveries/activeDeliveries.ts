@@ -1,3 +1,4 @@
+import { collectBreakdown } from "../../utils/collectAmount";
 /**
  * Active Deliveries: turn rider assignments (GET /api-frontdesk/parcel-assignment) into
  * riders with the parcels they still have out. Only parcels not yet delivered or returned count.
@@ -55,8 +56,8 @@ export const toActiveParcel = (a: any, p: any): ActiveParcel => {
         { label: "Storage", amount: num(p.storageCost) },
         { label: "Pickup fee", amount: num(p.pickUpCost) },
     ].filter((c) => c.amount > 0);
-    const podAmount = p.pod ? num(p.itemCost) : 0;
-    const costs = charges.reduce((s, c) => s + c.amount, 0);
+    const { pod: podAmount, prepaid, toCollect } = collectBreakdown(p);
+    if (prepaid > 0) charges.push({ label: "Paid online", amount: -prepaid });
     return {
         key: `${a.assignmentId}:${p.parcelId}`,
         assignmentId: a.assignmentId,
@@ -75,8 +76,7 @@ export const toActiveParcel = (a: any, p: any): ActiveParcel => {
         shelfName: p.shelfName,
         charges,
         podAmount,
-        // Some responses only carry the total.
-        toCollect: round2((costs || num(p.parcelAmount)) + podAmount),
+        toCollect,
     };
 };
 

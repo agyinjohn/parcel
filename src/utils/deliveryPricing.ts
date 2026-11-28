@@ -40,6 +40,8 @@ export interface DeliveryPriceTable {
     /** Optional named zones; a pin inside one gets its flat price instead of the distance price. */
     zones?: PriceZone[];
     fragileFee: number;
+    /** Customer bookings with several parcels in one trip: added for each parcel after the first. */
+    extraParcelFee?: number;
     /** Round the total up to this step (e.g. 1 or 5 cedis). 0 = no rounding. */
     roundTo: number;
     /** Set by the server on save; parcels record which version priced them. */
@@ -67,6 +69,7 @@ export const DEFAULT_PRICE_TABLE: DeliveryPriceTable = {
     ],
     zones: [],
     fragileFee: 0,
+    extraParcelFee: 5,
     roundTo: 1,
 };
 

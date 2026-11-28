@@ -256,6 +256,43 @@ on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
     return COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
 });
 registerDriverPayments(on, { driverAssignments: DRIVER_ASSIGNMENTS, findParcel, officeId: HOME_OFFICE.id, page });
+// ── Admin money checks (backend: integrity, duplicates, POD payouts) ──
+const ISSUES: any[] = [];
+on("get", /^\/api-admin\/driver-payments\/integrity$/, () => ISSUES);
+on("post", /^\/api-admin\/driver-payments\/integrity\/run$/, () => {
+    ISSUES.length = 0;
+    ISSUES.push({ id: "iss-1", officeId: HOME_OFFICE.id, type: "PAYOUT_TOTAL_MISMATCH", detail: "Payout DP-00412 says GHC 80.00 but its 4 fees add up to GHC 75.00", refId: "po-1", checkedAt: Date.now() });
+    return ISSUES;
+});
+const activeDupes = () => {
+    const byParcel = new Map<string, any[]>();
+    ASSIGNMENTS.filter((a) => ["ASSIGNED", "ACCEPTED", "PICKED_UP"].includes(a.status)).forEach((a) =>
+        a.parcels.filter((p: any) => !p.delivered).forEach((p: any) => byParcel.set(p.parcelId, [...(byParcel.get(p.parcelId) ?? []), a])));
+    return [...byParcel.entries()].filter(([, l]) => l.length > 1).map(([parcelId, l]) => ({
+        parcelId, receiverName: findParcel(parcelId)?.receiverName,
+        assignments: [...l].sort((x, y) => y.assignedAt - x.assignedAt).map((a) => ({ assignmentId: a.assignmentId, riderId: a.riderId, riderName: RIDERS.find((r) => r.userId === a.riderId)?.name, status: a.status, assignedAt: a.assignedAt })),
+    }));
+};
+on("get", /^\/api-admin\/assignments\/duplicates$/, () => activeDupes());
+on("post", /^\/api-admin\/assignments\/duplicates\/fix$/, () => {
+    const d = activeDupes();
+    d.forEach((x) => x.assignments.slice(1).forEach((h: any) => {
+        const a = ASSIGNMENTS.find((y) => y.assignmentId === h.assignmentId);
+        if (a) a.parcels = a.parcels.filter((p: any) => p.parcelId !== x.parcelId);
+    }));
+    return { parcelsFixed: d.length };
+});
+on("post", /^\/api-admin\/pod-payouts$/, ({ body }) => {
+    const ids: string[] = body?.collectionIds ?? [];
+    if (!ids.length) throw { status: 400, message: "Choose at least one collection" };
+    if (body.paymentMethod === "MOMO" && !body.momoReference) throw { status: 400, message: "MoMo transaction ID is required" };
+    const rows = ids.map((id) => (COUNTER_COLLECTIONS as any[]).find((r: any) => (r.id ?? r.parcelId) === id));
+    if (rows.some((r) => !r)) throw { status: 404, message: "Collection not found" };
+    if (rows.some((r: any) => r.podPaidOut)) throw { status: 409, message: "One of these was already paid out" };
+    rows.forEach((r: any) => Object.assign(r, { podPaidOut: true, podPaidAt: Date.now(), podPaymentMethod: body.paymentMethod, podPaidTo: body.paidTo }));
+    return rows;
+});
+
 // Distance-based delivery pricing: one table per station (the home station has one saved).
 const PRICE_TABLES: Record<string, DeliveryPriceTable> = {
     [HOME_OFFICE.id]: { ...DEFAULT_PRICE_TABLE, fragileFee: 3, zones: [{ name: "Airport Residential", lat: 5.6055, lng: -0.1780, radiusKm: 1.5, price: 25 }], version: 3, updatedAt: Date.now() - 6 * 864e5, updatedByName: "Kofi Mensah" },

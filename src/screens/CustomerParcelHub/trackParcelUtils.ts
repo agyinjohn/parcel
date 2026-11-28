@@ -74,7 +74,8 @@ export function chargeLines(p: CustomerParcel): ChargeLine[] {
   const lines: ChargeLine[] = [
     { label: "Inbound fee", amount: p.inboudPayed ? 0 : pos(p.inboundCost) },
     { label: "Storage", amount: pos(p.storageCost) },
-    { label: "Delivery fee", amount: p.homeDelivery ? pos(p.deliveryCost) : 0 },
+    // Paid online when the customer booked: only what's left of the delivery fee.
+    { label: "Delivery fee", amount: p.homeDelivery || p.deliveryBooked ? Math.max(0, pos(p.deliveryCost) - pos(p.deliveryPrepaidAmount)) : 0 },
     { label: "Pickup fee", amount: pos(p.pickUpCost) },
     { label: "Item value (pay on delivery)", amount: p.pod ? pos(p.itemCost) : 0 },
   ];
@@ -90,6 +91,8 @@ export function getAmountToPay(p: CustomerParcel): number | null {
 }
 
 const isAtStation = (p: CustomerParcel) => !!p.hasArrivedAtOffice || !!p.shelfName;
+/** Delivery is booked: by the customer online, or by the station. */
+export const isDeliveryBooked = (p: CustomerParcel) => !!p.deliveryBooked || !!p.homeDelivery;
 const isWithRider = (p: CustomerParcel) => !p.delivered && !p.pickedUp && (!!p.parcelAssigned || !!p.riderInfo);
 
 function getDisplayStatus(p: CustomerParcel): { status: ParcelDisplayStatus; label: string; hint: string } {
@@ -100,10 +103,25 @@ function getDisplayStatus(p: CustomerParcel): { status: ParcelDisplayStatus; lab
     return {
       status: "ready",
       label: "Ready at the station",
-      hint: p.homeDelivery ? "Delivery is booked. The station will assign a rider soon." : "Collect it at the station, or request delivery to your door.",
+      hint: isDeliveryBooked(p)
+        ? `Delivery is booked${p.scheduledDeliveryDate ? ` for ${formatSchedule(p)}` : ""}. The station will assign a rider${p.scheduledDeliveryDate ? " for that time" : " soon"}.`
+        : "Collect it at the station, or request delivery to your door.",
     };
-  return { status: "in_progress", label: "On the way to the station", hint: "We'll text you when it arrives. You can book delivery now." };
+  return {
+    status: "in_progress",
+    label: "On the way to the station",
+    hint: isDeliveryBooked(p)
+      ? `Delivery is booked${p.scheduledDeliveryDate ? ` for ${formatSchedule(p)}` : ""}. We'll deliver once it reaches the station.`
+      : "We'll text you when it arrives. You can book delivery now.",
+  };
 }
+
+const formatSchedule = (p: CustomerParcel) => {
+  const d = new Date(`${p.scheduledDeliveryDate}T${p.scheduledDeliveryTime || "09:00"}`);
+  return Number.isNaN(d.getTime())
+    ? [p.scheduledDeliveryDate, p.scheduledDeliveryTime].filter(Boolean).join(" ")
+    : d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", ...(p.scheduledDeliveryTime ? { hour: "2-digit", minute: "2-digit" } : {}) });
+};
 
 function buildTimeline(p: CustomerParcel): ParcelTimelineEvent[] {
   const created = p.createdAt ?? null;
@@ -112,7 +130,7 @@ function buildTimeline(p: CustomerParcel): ParcelTimelineEvent[] {
     { id: "registered", label: "Registered by the sender", timestamp: created, completed: created != null },
     { id: "arrived", label: "Arrived at the station", timestamp: null, completed: isAtStation(p) || done || isWithRider(p) },
   ];
-  if (p.homeDelivery || isWithRider(p) || p.delivered) {
+  if (isDeliveryBooked(p) || isWithRider(p) || p.delivered) {
     events.push({ id: "rider", label: p.riderInfo?.riderName ? `With rider ${p.riderInfo.riderName}` : "With a rider", timestamp: null, completed: isWithRider(p) || !!p.delivered });
     events.push({ id: "delivered", label: "Delivered", timestamp: p.delivered ? p.updatedAt ?? null : null, completed: !!p.delivered });
   } else {
@@ -179,7 +197,7 @@ export function sortParcelsForReceive(parcels: EnrichedParcel[]): EnrichedParcel
 }
 
 export function isParcelDeliverable(p: EnrichedParcel): boolean {
-  return p.displayStatus === "ready" || p.displayStatus === "in_progress";
+  return (p.displayStatus === "ready" || p.displayStatus === "in_progress") && !isDeliveryBooked(p);
 }
 
 export function isParcelArrived(p: EnrichedParcel): boolean {

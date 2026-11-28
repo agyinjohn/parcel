@@ -1,3 +1,4 @@
+import { amountToCollect } from "../../utils/collectAmount";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
     PackageIcon,
@@ -138,8 +139,7 @@ export const RiderDashboard = (): JSX.Element => {
             // Show confirmation modal for delivery
             if (assignment) {
                 const parcel = assignment.parcel;
-                const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                    (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+                const totalAmount = amountToCollect(parcel);
                 // Pre-fill amount collected with expected total
                 setAmountCollected(totalAmount.toFixed(2));
             }
@@ -202,8 +202,7 @@ export const RiderDashboard = (): JSX.Element => {
 
             if (response.success) {
                 const parcel = selectedAssignment.parcel;
-                const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                    (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+                const totalAmount = amountToCollect(parcel);
                 const collected = parseFloat(amountCollected);
 
                 showToast(
@@ -319,8 +318,7 @@ export const RiderDashboard = (): JSX.Element => {
     const totalAmountToCollect = useMemo(() => {
         return activeAssignments.reduce((total, assignment) => {
             const parcel = assignment.parcel;
-            const parcelAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+            const parcelAmount = amountToCollect(parcel);
             return total + parcelAmount;
         }, 0);
     }, [activeAssignments]);
@@ -345,10 +343,7 @@ export const RiderDashboard = (): JSX.Element => {
             if (timestamp < startOfDay || timestamp > endOfDay) return total;
 
             const parcelAmount =
-                (parcel.deliveryCost || 0) +
-                (parcel.pickUpCost || 0) +
-                (parcel.inboundCost || 0) +
-                (parcel.storageCost || 0);
+                amountToCollect(parcel);
 
             return total + parcelAmount;
         }, 0);
@@ -359,8 +354,7 @@ export const RiderDashboard = (): JSX.Element => {
         try {
             const pdfData = activeAssignments.map(assignment => {
                 const parcel = assignment.parcel;
-                const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                    (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+                const totalAmount = amountToCollect(parcel);
 
                 const location = parcel.receiverAddress || 'N/A';
 

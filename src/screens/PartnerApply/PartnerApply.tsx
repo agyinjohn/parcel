@@ -6,7 +6,8 @@ import { API_ENDPOINTS } from "../../config/api";
 import { BrandMark } from "../../components/BrandMark";
 
 const inputCls = "h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:border-[#ea690c] focus:ring-2 focus:ring-orange-100";
-const VOLUMES = ["Fewer than 10", "10–50", "50–200", "More than 200"];
+// The API takes a number: a typical weekly count for each range.
+const VOLUMES: [number, string][] = [[5, "Fewer than 10"], [30, "10–50"], [100, "50–200"], [250, "More than 200"]];
 
 /**
  * Public "become a partner" request. Partner accounts are created by an admin (User Management →
@@ -33,6 +34,7 @@ export const PartnerApply = (): JSX.Element => {
             await axios.post(`${API_ENDPOINTS.VENDOR}/applications`, {
                 ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim() || undefined])),
                 phoneNumber: `+233${local}`,
+                parcelsPerWeek: f.parcelsPerWeek ? Number(f.parcelsPerWeek) : undefined,
             }, { headers: { "Content-Type": "application/json" }, timeout: 15000 });
             setDone(true);
         } catch (err: any) {
@@ -78,7 +80,7 @@ export const PartnerApply = (): JSX.Element => {
                                 <label className="block text-sm font-medium text-neutral-700">Parcels per week
                                     <select value={f.parcelsPerWeek} onChange={set("parcelsPerWeek")} className={`mt-1 ${inputCls}`}>
                                         <option value="">Choose</option>
-                                        {VOLUMES.map((v) => <option key={v} value={v}>{v}</option>)}
+                                        {VOLUMES.map(([n, l]) => <option key={n} value={n}>{l}</option>)}
                                     </select>
                                 </label>
                             </div>

@@ -1,3 +1,4 @@
+import type { DeliveryLocation } from "../../components/DeliveryLocationPicker";
 export type PartnerParcelStatus = "pending" | "received" | "delivered" | "collected" | "failed" | "reversed";
 
 export interface PartnerParcel {
@@ -41,6 +42,8 @@ export interface SendParcelForm {
   itemCost: string;
   deliveryFee: string;
   pod: boolean;
+  /** Optional pinned drop-off point, so the rider has a map location and the price can use distance. */
+  pin?: DeliveryLocation | null;
 }
 
 export const EMPTY_FORM: SendParcelForm = {

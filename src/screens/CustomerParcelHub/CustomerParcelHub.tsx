@@ -221,6 +221,13 @@ export const CustomerParcelHub = (): JSX.Element => {
     setSelectedParcel(prev => (prev ? booked(prev) : prev));
     if (step === "detail") setActionSuccess("delivery");
     showToast(`Delivery booked for ${count} parcel${count !== 1 ? "s" : ""}.`, "success");
+    // Reload from the server so the amount paid online and the schedule show.
+    void searchParcelsByPhone(phone).then((r) => {
+      if (!r.success || !r.data?.length) return;
+      const fresh = r.data.map((p) => enrichParcel(p, officeNames));
+      setParcels(fresh);
+      setSelectedParcel((prev) => (prev ? fresh.find((p) => p.parcelId === prev.parcelId) ?? prev : prev));
+    });
   };
 
   const openDeliveryModal = async (items: EnrichedParcel[]) => {

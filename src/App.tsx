@@ -55,6 +55,7 @@ import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { CounterCashUp } from "./screens/CounterCashUp/CounterCashUp";
 import { DriverPayments } from "./screens/DriverPayments/DriverPayments";
 import { PartnerApply } from "./screens/PartnerApply/PartnerApply";
+import { PartnerRequests } from "./screens/Admin/PartnerRequests/PartnerRequests";
 import { PricingReview } from "./screens/Admin/PricingReview/PricingReview";
 import { CashReports } from "./screens/Admin/CashReports/CashReports";
 import { API_V2 } from "./config/api";
@@ -190,6 +191,7 @@ export const App = (): JSX.Element => {
                               <Route path="/admin/rider-detail" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><RiderDetail /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/financial" element={<Navigate to="/admin/dashboard" replace />} />
                               <Route path="/admin/financial-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><FinancialReports /></AdminLayout></ProtectedRoute>} />
+                              <Route path="/admin/partner-requests" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><PartnerRequests /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/pricing-review" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><PricingReview /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/cash-reports" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><CashReports /></AdminLayout></ProtectedRoute>} />
                               <Route path="/admin/system-logs" element={<ProtectedRoute allowedRoles={ADMIN_ROLES}><AdminLayout><SystemLogs /></AdminLayout></ProtectedRoute>} />

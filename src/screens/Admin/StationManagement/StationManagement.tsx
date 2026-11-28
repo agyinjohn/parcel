@@ -49,6 +49,8 @@ export const StationManagement = (): JSX.Element => {
     const [editingStation, setEditingStation] = useState<Station | null>(null);
     // Pickup-request charge for the station being edited.
     const [pickupEnabled, setPickupEnabled] = useState(false);
+    // Shown to customers on the tracking page.
+    const [openingHours, setOpeningHours] = useState("");
     const [pickupAmount, setPickupAmount] = useState("");
     const [payPolicy, setPayPolicy] = useState<"ON_COLLECTION" | "ON_ARRIVAL">("ON_COLLECTION");
     const [savingStation, setSavingStation] = useState(false);
@@ -246,6 +248,7 @@ export const StationManagement = (): JSX.Element => {
         setPickupEnabled(!!station.pickupChargeEnabled);
         setPickupAmount(station.pickupChargeAmount != null ? String(station.pickupChargeAmount) : "");
         setPayPolicy(station.driverPayPolicy ?? "ON_COLLECTION");
+        setOpeningHours((station as { openingHours?: string | null }).openingHours ?? "");
         setShowEditStationModal(true);
     };
 
@@ -270,7 +273,7 @@ export const StationManagement = (): JSX.Element => {
             pickupChargeEnabled: pickupEnabled,
             pickupChargeAmount: pickupEnabled ? amount : null,
             // Updated backend: station code and driver pay policy are editable too.
-            ...(API_V2 ? { code: stationFormData.code.trim(), driverPayPolicy: payPolicy } : {}),
+            ...(API_V2 ? { code: stationFormData.code.trim(), driverPayPolicy: payPolicy, openingHours: openingHours.trim() } : {}),
         });
         setSavingStation(false);
         if (!res.success) {
@@ -630,6 +633,14 @@ export const StationManagement = (): JSX.Element => {
                                                 className="border border-[#d1d1d1]"
                                             />
                                         </div>
+
+                                        {API_V2 && (
+                                            <div className="flex flex-col gap-2">
+                                                <Label className="text-sm font-semibold text-neutral-800">Opening hours</Label>
+                                                <Input value={openingHours} onChange={(e) => setOpeningHours(e.target.value)} placeholder="e.g. Mon–Sat, 8am–6pm" className="border border-[#d1d1d1]" />
+                                                <p className="text-xs text-[#5d5d5d]">Customers see this on the parcel tracking page.</p>
+                                            </div>
+                                        )}
 
                                         <div className="rounded-lg border border-[#d1d1d1] p-3 space-y-3">
                                             <div className="flex items-center justify-between gap-3">

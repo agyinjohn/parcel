@@ -64,7 +64,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
   const deliveryQuery = hasDeliveryPin ? `${parcel.receiverLatitude},${parcel.receiverLongitude}` : "";
   const deliveryPlace = [parcel.receiverLocationName, parcel.receiverAddress || parcel.deliveryAddress].filter(Boolean).join(" · ");
 
-  const canRequestDelivery = !actionSuccess && !finished && !withRider && !parcel.homeDelivery;
+  const canRequestDelivery = !actionSuccess && !finished && !withRider && !parcel.homeDelivery && !parcel.deliveryBooked;
 
   const copyId = async () => {
     try { await navigator.clipboard.writeText(parcel.parcelId); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
@@ -157,7 +157,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
       ) : null}
 
       {/* Delivery location (when booked, not yet with a rider) */}
-      {!withRider && (parcel.homeDelivery || hasDeliveryPin) && (
+      {!withRider && (parcel.homeDelivery || parcel.deliveryBooked || hasDeliveryPin) && (
         <Section icon={MapPin} title={parcel.delivered ? "Delivered to" : "Delivery address"}>
           {deliveryPlace ? <p className="text-sm text-neutral-800">{deliveryPlace}</p> : <p className="text-sm text-slate-500">No address given yet.</p>}
           {hasDeliveryPin && <MapBox query={deliveryQuery} title="Delivery location" />}
@@ -178,7 +178,9 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
               <span className="text-xl font-bold text-[#ea690c]">{amount != null ? formatTrackCurrency(amount) : "Ask the station"}</span>
             </div>
             <p className="text-xs text-slate-500">
-              {parcel.homeDelivery ? "Pay the rider when your parcel arrives." : "Pay at the station when you collect, or online when you book delivery."}
+              {(parcel.deliveryPrepaidAmount ?? 0) > 0
+                ? `You paid ${formatTrackCurrency(parcel.deliveryPrepaidAmount)} online for delivery${amount ? "; pay the rest to the rider" : ""}.`
+                : parcel.homeDelivery || parcel.deliveryBooked ? "Pay the rider when your parcel arrives." : "Pay at the station when you collect, or online when you book delivery."}
             </p>
           </>
         )}
@@ -210,7 +212,7 @@ export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onReq
           </div>
         </div>
       )}
-      {!canRequestDelivery && parcel.homeDelivery && !finished && !withRider && (
+      {!canRequestDelivery && (parcel.homeDelivery || parcel.deliveryBooked) && !finished && !withRider && (
         <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500"><Clock className="h-3.5 w-3.5" />Delivery is booked for this parcel.</p>
       )}
       <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400"><UserRound className="h-3 w-3" />Only show this page to people you trust with your parcel.</p>

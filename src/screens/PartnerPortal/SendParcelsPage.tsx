@@ -12,6 +12,7 @@ import { Input } from "../../components/ui/input";
 
 import { Label } from "../../components/ui/label";
 import { GhanaPhoneInput } from "../../components/GhanaPhoneInput";
+import { DeliveryLocationPicker } from "../../components/DeliveryLocationPicker";
 import { validatePhoneNumber } from "../../utils/dataHelpers";
 
 import {
@@ -173,6 +174,15 @@ export const SendParcelsPage = () => {
     itemCost: pod && itemCost > 0 ? itemCost : undefined,
 
     pod,
+    POD: pod,
+    // Pinned drop-off point (optional).
+    ...(f.pin ? {
+      receiverLatitude: f.pin.lat,
+      receiverLongitude: f.pin.lng,
+      receiverLocationName: f.pin.name,
+      receiverPlaceId: f.pin.placeId,
+      receiverLocationSource: f.pin.source,
+    } : {}),
   };
   };
 
@@ -530,6 +540,14 @@ export const SendParcelsPage = () => {
 
                   placeholder="Street, Area, City" className="border border-[#d1d1d1]" />
 
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-semibold text-neutral-800">Delivery location on the map <span className="font-normal text-gray-400">(optional, helps the rider and the price)</span></Label>
+                <DeliveryLocationPicker
+                  value={form.pin ?? null}
+                  onChange={(loc) => setForm(prev => ({ ...prev, pin: loc, receiverAddress: prev.receiverAddress || loc?.address || loc?.name || "" }))}
+                />
               </div>
 
             </div>

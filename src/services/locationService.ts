@@ -300,7 +300,7 @@ class LocationService {
      */
     async updateStation(
         stationId: string,
-        data: { name?: string; address?: string; locationId?: string; managerId?: string; pickupChargeEnabled?: boolean; pickupChargeAmount?: number | null; driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL"; code?: string }
+        data: { name?: string; address?: string; locationId?: string; managerId?: string; pickupChargeEnabled?: boolean; pickupChargeAmount?: number | null; driverPayPolicy?: "ON_COLLECTION" | "ON_ARRIVAL"; code?: string; openingHours?: string }
     ): Promise<{ success: boolean; message: string }> {
         try {
             await this.apiClientAdmin.put(`/office/${stationId}`, data);
