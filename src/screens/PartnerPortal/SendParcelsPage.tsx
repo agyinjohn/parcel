@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -65,6 +65,10 @@ export const SendParcelsPage = () => {
   const [submittedIds, setSubmittedIds] = useState<string[]>([]);
 
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const batchKey = useRef<string | null>(null);
+  const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `k-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  // A changed batch is a new request.
+  useEffect(() => { batchKey.current = null; }, [batch]);
 
 
 
@@ -202,11 +206,40 @@ export const SendParcelsPage = () => {
 
     const ids: string[] = [];
 
+    // A batch goes in one all-or-nothing request when the backend supports it.
+    if (toSubmit.length > 1) {
+      const key = batchKey.current ?? (batchKey.current = newKey());
+      const batchResult = await vendorService.submitBatch(toSubmit.map(formToPayload), key);
+      if (batchResult.success && batchResult.data?.length === toSubmit.length) {
+        const created = batchResult.data.map(p => p.parcelId || "").filter(Boolean);
+        batchKey.current = null;
+        setSubmittedCount(toSubmit.length);
+        setSubmittedIds(created);
+        showToast(`Successfully saved ${toSubmit.length} parcels!`, "success");
+        setSubmitting(false);
+        setSubmitSuccess(true);
+        setForm({ ...EMPTY_FORM, senderName: vendor.name });
+        setBatch([]);
+        return;
+      }
+      if (!batchResult.unsupported) {
+        // Nothing was saved; the same key is kept so a retry can't register them twice.
+        setSubmitError(batchResult.message);
+        showToast(batchResult.message, "error");
+        setSubmitting(false);
+        return;
+      }
+      // Older backend: fall through and send one by one.
+    }
+
 
 
     for (let i = 0; i < toSubmit.length; i++) {
 
-      const result = await vendorService.submitParcel(formToPayload(toSubmit[i]));
+      const entry = toSubmit[i] as SendParcelForm & { _key?: string };
+      // One key per parcel, kept on the entry, so a retry after a timeout isn't a second parcel.
+      entry._key = entry._key ?? newKey();
+      const result = await vendorService.submitParcel(formToPayload(entry), entry._key);
 
       if (!result.success || !result.data?.parcelId) {
         // The ones before this were registered: take them out of the batch so a retry doesn't

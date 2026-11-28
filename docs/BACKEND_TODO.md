@@ -233,6 +233,7 @@ The frontend is built: Branch Settings → Charges → **Delivery prices**, and 
   "perKmBeyond": 2,
   "baseFee": 10, "perKm": 2, "minFee": 15,
   "weightBands": [ { "overKg": 5, "surcharge": 5 }, { "overKg": 10, "surcharge": 10 }, { "overKg": 20, "surcharge": 20 } ],
+  "zones": [ { "name": "Airport Residential", "lat": 5.6055, "lng": -0.1780, "radiusKm": 1.5, "price": 25 } ],
   "fragileFee": 3,
   "roundTo": 1
 }
@@ -240,13 +241,14 @@ The frontend is built: Branch Settings → Charges → **Delivery prices**, and 
 
 The GET also returns `version`, `updatedAt` and `updatedByName`.
 - **Keep every version.** Each PUT adds a new version (1, 2, 3…); never overwrite, so old parcels can still be explained.
-- **Validate.** At least one band; band distances above 0 and unique; prices above 0 and not cheaper for a longer band; nothing negative. Reject with 400 otherwise.
+- **Validate zones:** each needs a name (unique per station), a radius above 0 km, a price above 0 and a valid centre.
+- **Validate bands.** At least one band; band distances above 0 and unique; prices above 0 and not cheaper for a longer band; nothing negative. Reject with 400 otherwise.
 - **Admins** need the same per station: `GET/PUT /api-admin/offices/{officeId}/delivery-pricing`.
 
 ### The pricing rules
 
 The frontend uses exactly this (`src/utils/deliveryPricing.ts`, with tests). Please match it:
-1. **Distance** (km, one decimal):
+1. **Zone or distance:** if the pin is inside one or more zones (straight-line distance from the zone centre ≤ `radiusKm`), use the price of the **smallest** such zone, labelled `Zone: <name>`. Otherwise use the distance price (km, one decimal):
    - `BANDS`: the price of the first band with `km ≤ upToKm`. Past the last band: last price + `perKmBeyond` × each extra km, rounded up to whole km.
    - `PER_KM`: `max(minFee, baseFee + perKm × km)`.
 2. **Weight:** add the `surcharge` of the **highest** weight band with `weight > overKg` (bands don't add up). No weight given: no surcharge.
@@ -258,7 +260,7 @@ The frontend uses exactly this (`src/utils/deliveryPricing.ts`, with tests). Ple
 `POST /api-frontdesk/delivery-pricing/quote` `{ "latitude": 5.637, "longitude": -0.165, "weightKg": 12, "fragile": false }` → 
 
 ```json
-{ "distanceKm": 13.5, "distanceSource": "ROAD",
+{ "distanceKm": 13.5, "distanceSource": "ROAD", "zone": null,
   "lines": [ { "label": "Distance 10–15 km (13.5 km)", "amount": 35 }, { "label": "Weight (12 kg)", "amount": 10 } ],
   "price": 45, "tableVersion": 4 }
 ```
@@ -279,6 +281,7 @@ If this endpoint isn't there, the intake form estimates the price itself from th
 | `distanceSource` | `ROAD` or `ESTIMATE` | |
 | `suggestedDeliveryCost` | number | What the table suggested. `deliveryCost` is what was charged. |
 | `pricingTableVersion` | number | The table version that priced it. |
+| `fragile` | boolean | Now a real checkbox at intake (it was always `false`). Adds `fragileFee` to the quote. |
 | `priceOverrideReason` | `BULKY`, `HARD_TO_REACH`, `REGULAR_CUSTOMER`, `PROMOTION`, `WRONG_PIN` or `OTHER` | Required when `deliveryCost` ≠ `suggestedDeliveryCost`; 400 without it. `OTHER` explains in `specialInstructions`. |
 
 - **Don't trust the sent suggestion.** Re-quote on the server and store **your** figures for `distanceKm` and `suggestedDeliveryCost`. If yours differs from the sent one by more than GHC 0.01, require the override reason as above.
@@ -288,14 +291,35 @@ If this endpoint isn't there, the intake form estimates the price itself from th
 
 `POST /api-user/delivery-requests/quote` (section 5b) should price each parcel with its station's table and this road distance. Suggested rule for several parcels in one trip: the highest single parcel price, plus a fixed amount for each extra parcel (a table setting, e.g. GHC 5).
 
-### Stage 2 (after about 4–6 weeks of data; for later)
+### Stage 2: pricing review (frontend built, admin → Delivery Pricing Review)
 
-A weekly job, per station, over delivered parcels that have a distance:
-- the usual (median) price charged in each distance band, and the best-fitting base fee and price per km;
-- how often staff override, by reason and by staff member;
-- a proposed new table.
+Prices are proposed from **what deliveries cost** plus a target margin, and checked against **whether customers accept them**. Staff overrides are shown as a check, not used to set prices. The admin adjusts the cost assumptions on the page (fuel + maintenance per km, rider pay per hour, margin, minimum deliveries), and the page works out the proposal (`src/utils/pricingReview.ts`, with tests).
 
-Admins review the proposal on a new page and approve it, which creates a new table version. Details when we get there.
+`GET /api-admin/delivery-pricing/review?officeId=&from=&to=` (dates `yyyy-MM-dd`):
+
+```json
+{
+  "officeId": "...", "officeName": "Accra Central", "from": "2026-10-04", "to": "2026-11-28",
+  "table": { "...the station's current table, with version..." },
+  "statsTableVersion": 3, "statsSince": 1795000000000,
+  "bands": [
+    { "key": "band:6", "label": "3–6 km", "kind": "BAND", "upToKm": 6,
+      "deliveries": 96, "suggestedMedian": 20, "chargedMedian": 22,
+      "overrides": 32, "overrideReasons": { "HARD_TO_REACH": 26, "BULKY": 6 },
+      "avgKmDriven": 5.1, "avgMinutes": 26, "quotesShown": 40, "quotesBooked": 31 },
+    { "key": "zone:Airport Residential", "label": "Airport Residential", "kind": "ZONE", "zoneName": "Airport Residential", "...": "same fields" }
+  ],
+  "staff": [ { "userId": "...", "name": "Yaw Mensah", "parcels": 126, "overrides": 48, "avgDifference": -4.5 } ]
+}
+```
+
+How to fill it, per band of the current table (and per zone; a parcel priced by a zone counts in its zone, not its band). Use delivered home-delivery parcels of the station in the period:
+- **Deliveries, prices and overrides:** only parcels with `pricingTableVersion` = the current version (`statsTableVersion`, `statsSince` = when that version was saved). Otherwise approving new prices would be judged on old data. Give the medians of `suggestedDeliveryCost` and `deliveryCost`, and count overrides by reason.
+- **Cost (`avgKmDriven`, `avgMinutes`):** from the rider's GPS track for the trip that delivered the parcel. Split the trip's km and time across its stops, so 10 parcels in one trip each carry a tenth plus their own last leg; batching makes dense areas cheaper. Cost doesn't depend on the price, so use every delivery in the period, not just the current version.
+- **Acceptance:** from customer delivery bookings (5b): quotes shown (`/delivery-requests/quote` calls whose pin fell in this band or zone) and quotes booked (paid requests that used those quote IDs). Current version only.
+- **Staff:** parcels registered and overrides per user, and the average of (charged − suggested) on their overrides.
+
+The admin approves the proposal with `PUT /api-admin/offices/{officeId}/delivery-pricing` (the full table, plus a `note` with the changes). Store it as a new version, as for the manager's save.
 
 ---
 
@@ -308,7 +332,10 @@ Missing on the backend:
   - Only while the parcel is still `PENDING` (not yet received at the station), and only by the partner who sent it. Otherwise 409 or 403.
   - The portal already has the Edit button. Until this exists, it tells the partner to call the station.
 - **Station list for partners:** the portal fills "Destination station" from `GET /api/offices/locations`. Please confirm a `VENDOR` token can read it, limited to the partner's company. It's 403 without a login.
-- **Duplicate submits:** accept an `Idempotency-Key` header on `POST /api-vendor/parcels`, so a request retried after a timeout doesn't register the parcel twice. Also reject the same `barCode` from the same partner within 24 hours with 409.
+- **Batch submit, all or nothing:** `POST /api-vendor/parcels/batch` `{ "parcels": [ VendorParcelRequest, ... ] }` returns the created parcels in the same order.
+  - Validate **all** of them first. If any is invalid, save none and return 400 with a message naming it: `"Parcel 2 (Kofi Owusu): destination station not found"`. Use 400, not 404, for invalid data; the portal reads a plain 404 or 405 as "this endpoint doesn't exist yet" and then falls back to sending one at a time.
+  - The portal already uses it.
+- **Duplicate submits:** accept an `Idempotency-Key` header on `POST /api-vendor/parcels` and `/parcels/batch`. If the same key comes again within 24 hours, return the first result without creating anything. The portal sends a key per parcel or batch, and reuses it on a retry. Also reject the same `barCode` from the same partner within 24 hours with 409.
 - **Delivery location (optional, recommended):** add `receiverLatitude`, `receiverLongitude`, `receiverLocationName`, `receiverPlaceId` and `receiverLocationSource` to `VendorParcelRequest`. Then partner parcels get a map pin for riders and a distance-based price (5c) like our own parcels.
 
 ---

@@ -258,7 +258,7 @@ on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
 registerDriverPayments(on, { driverAssignments: DRIVER_ASSIGNMENTS, findParcel, officeId: HOME_OFFICE.id, page });
 // Distance-based delivery pricing: one table per station (the home station has one saved).
 const PRICE_TABLES: Record<string, DeliveryPriceTable> = {
-    [HOME_OFFICE.id]: { ...DEFAULT_PRICE_TABLE, fragileFee: 3, version: 3, updatedAt: Date.now() - 6 * 864e5, updatedByName: "Kofi Mensah" },
+    [HOME_OFFICE.id]: { ...DEFAULT_PRICE_TABLE, fragileFee: 3, zones: [{ name: "Airport Residential", lat: 5.6055, lng: -0.1780, radiusKm: 1.5, price: 25 }], version: 3, updatedAt: Date.now() - 6 * 864e5, updatedByName: "Kofi Mensah" },
 };
 on("get", /^\/api-frontdesk\/office\/delivery-pricing$/, () => {
     const t = PRICE_TABLES[HOME_OFFICE.id];
@@ -270,12 +270,53 @@ on("put", /^\/api-frontdesk\/office\/delivery-pricing$/, ({ body }) => {
     PRICE_TABLES[HOME_OFFICE.id] = { ...body, version: (prev?.version ?? 0) + 1, updatedAt: Date.now(), updatedByName: "Kofi Mensah" };
     return PRICE_TABLES[HOME_OFFICE.id];
 });
+// Admin: save any station's table (pricing review approval).
+on("put", /^\/api-admin\/offices\/([^/]+)\/delivery-pricing$/, ({ match, body }) => {
+    const id = decodeURIComponent(match[1]);
+    const { note: _note, ...table } = body ?? {};
+    const prev = PRICE_TABLES[id];
+    PRICE_TABLES[id] = { ...table, version: (prev?.version ?? 0) + 1, updatedAt: Date.now(), updatedByName: "Abena Owusu" };
+    return PRICE_TABLES[id];
+});
+// Pricing review: sample stats per band, set up to show each kind of proposal.
+on("get", /^\/api-admin\/delivery-pricing\/review$/, ({ params }) => {
+    const id = params.get("officeId") ?? HOME_OFFICE.id;
+    const o = OFFICES.find((x) => x.id === id) ?? HOME_OFFICE;
+    const t = PRICE_TABLES[id] ?? null;
+    const sample: Record<number, [number, number, number, number, number, number, Record<string, number>, number]> = {
+        // upToKm: deliveries, chargedMedian, avgKmDriven, avgMinutes, quotesShown, quotesBooked, overrideReasons, overrides
+        3: [124, 15, 2.4, 18, 60, 48, { REGULAR_CUSTOMER: 4 }, 4],
+        6: [96, 22, 5.1, 26, 40, 31, { HARD_TO_REACH: 26, BULKY: 6 }, 32],
+        10: [61, 25, 9.4, 38, 30, 12, { PROMOTION: 3 }, 3],
+        15: [34, 35, 16.5, 70, 12, 9, { HARD_TO_REACH: 5 }, 5],
+    };
+    // A table approved in the review is new: only a few deliveries have been priced with it so far.
+    const fresh = t?.updatedByName === "Abena Owusu" && (t.updatedAt ?? 0) > Date.now() - 864e5;
+    const bands = (t?.bands ?? []).map((b, i, all) => {
+        const row = sample[b.upToKm] ?? [8, b.price, b.upToKm * 0.8, b.upToKm * 4, 2, 1, {}, 0];
+        const [deliveries, chargedMedian, avgKmDriven, avgMinutes, quotesShown, quotesBooked, overrideReasons, overrides] = fresh
+            ? [Math.round(row[0] / 20), b.price, row[2], row[3], Math.round(row[4] / 20), Math.round(row[5] / 20), {}, 0] as typeof row
+            : row;
+        return { key: `band:${b.upToKm}`, label: `${i === 0 ? 0 : all[i - 1].upToKm}–${b.upToKm} km`, kind: "BAND", upToKm: b.upToKm, deliveries, suggestedMedian: b.price, chargedMedian, overrides, overrideReasons, avgKmDriven, avgMinutes, quotesShown, quotesBooked };
+    });
+    const zones = (t?.zones ?? []).map((z) => ({ key: `zone:${z.name}`, label: z.name, kind: "ZONE", zoneName: z.name, deliveries: fresh ? 2 : 41, suggestedMedian: z.price, chargedMedian: z.price, overrides: 2, overrideReasons: { WRONG_PIN: 2 }, avgKmDriven: 6.2, avgMinutes: 30, quotesShown: 14, quotesBooked: 11 }));
+    return {
+        officeId: o.id, officeName: o.name, from: params.get("from"), to: params.get("to"), table: t,
+        statsTableVersion: t?.version, statsSince: t?.updatedAt,
+        bands: [...bands, ...zones],
+        staff: t ? [
+            { userId: "user-3", name: "Akosua Boateng", parcels: 142, overrides: 11, avgDifference: 3.5 },
+            { userId: "user-2", name: "Kofi Mensah", parcels: 88, overrides: 7, avgDifference: 2 },
+            { userId: "user-7", name: "Yaw Mensah", parcels: 126, overrides: 48, avgDifference: -4.5 },
+        ] : [],
+    };
+});
 /** Mock road distance: the real backend asks Google; here straight line × road factor. */
 export const mockDeliveryQuote = (officeId: string, lat: number, lng: number, weightKg?: number, fragile?: boolean) => {
     const t = PRICE_TABLES[officeId];
     const o = OFFICES.find((x) => x.id === officeId) ?? HOME_OFFICE;
     if (!t) throw { status: 404, message: "This station has no delivery prices yet" };
-    return quoteFromTable(t, estimateRoadKm({ lat: o.latitude, lng: o.longitude }, { lat, lng }), { weightKg, fragile, distanceSource: "ROAD" });
+    return quoteFromTable(t, estimateRoadKm({ lat: o.latitude, lng: o.longitude }, { lat, lng }), { weightKg, fragile, distanceSource: "ROAD", pin: { lat, lng } });
 };
 on("post", /^\/api-frontdesk\/delivery-pricing\/quote$/, ({ body }) => {
     if (!Number.isFinite(body?.latitude) || !Number.isFinite(body?.longitude)) throw { status: 400, message: "latitude and longitude are required" };

@@ -3,7 +3,7 @@
  * submit a parcel, list parcels, the status dashboard and earnings. There is no edit endpoint on the
  * backend yet, so none here either. Demo login: 0200000007.
  */
-type Handler = (ctx: { params: URLSearchParams; body: any; match: RegExpMatchArray }) => unknown;
+type Handler = (ctx: { params: URLSearchParams; body: any; match: RegExpMatchArray; config?: any }) => unknown;
 type On = (method: string, pattern: RegExp, handler: Handler) => void;
 
 interface Ctx {
@@ -66,18 +66,42 @@ export const registerVendor = (on: On, { parcels, offices, page, serialize }: Ct
     const mine = () => parcels.filter((p) => p.vendorId === DEMO_VENDOR.id);
     const view = (p: any) => ({ ...serialize(p), parcelStatus: p.parcelStatus, toOfficeId: p.toOfficeId, to: p.to, vendorDeliveryFee: p.vendorDeliveryFee });
 
-    on("post", /^\/api-vendor\/parcels$/, ({ body }) => {
+    const check = (body: any, n = "") => {
         if (!body?.receiverName || !body?.recieverPhoneNumber || !body?.destinationStationId)
-            throw { status: 400, message: "receiverName, recieverPhoneNumber and destinationStationId are required" };
-        if (!officeOf(body.destinationStationId)) throw { status: 404, message: "Destination station not found" };
-        if (body.pod && !(Number(body.itemCost) > 0 || Number(body.deliveryFee) > 0)) throw { status: 400, message: "POD parcels need an item cost or delivery fee" };
-        const p = make({
+            throw { status: 400, message: `${n}receiverName, recieverPhoneNumber and destinationStationId are required` };
+        if (!officeOf(body.destinationStationId)) throw { status: 404, message: `${n}Destination station not found` };
+        if (body.pod && !(Number(body.itemCost) > 0 || Number(body.deliveryFee) > 0)) throw { status: 400, message: `${n}POD parcels need an item cost or delivery fee` };
+    };
+    // Idempotency-Key → the first result, so a retried request doesn't create parcels twice.
+    const seen = new Map<string, unknown>();
+    const keyOf = (config?: any) => config?.headers?.["Idempotency-Key"] ?? config?.headers?.get?.("Idempotency-Key");
+
+    on("post", /^\/api-vendor\/parcels\/batch$/, ({ body, config }) => {
+        const key = keyOf(config);
+        if (key && seen.has(key)) return seen.get(key);
+        const list: any[] = body?.parcels ?? [];
+        if (!list.length) throw { status: 400, message: "No parcels in the batch" };
+        list.forEach((b, i) => check(b, `Parcel ${i + 1} (${b?.receiverName || "no name"}): `)); // all or nothing
+        const created = list.map((b) => view(create(b)));
+        if (key) seen.set(key, created);
+        return created;
+    });
+
+    const create = (body: any) =>
+        make({
             receiverName: body.receiverName, recieverPhoneNumber: body.recieverPhoneNumber, alternativePhoneNumber: body.recieverAlternativePhoneNumber,
             receiverAddress: body.receiverAddress, parcelDescription: body.parcelDescription, parcelWeight: body.parcelWeight, numberOfItems: body.numberOfItems,
             itemCost: Number(body.itemCost) || 0, vendorDeliveryFee: Number(body.deliveryFee) || 0, deliveryCost: Number(body.deliveryFee) || 0,
             pod: !!body.pod, parcelStatus: "PENDING", toOfficeId: body.destinationStationId, hasArrivedAtOffice: false,
         }, 0);
-        return view(p);
+
+    on("post", /^\/api-vendor\/parcels$/, ({ body, config }) => {
+        const key = keyOf(config);
+        if (key && seen.has(key)) return seen.get(key);
+        check(body);
+        const out = view(create(body));
+        if (key) seen.set(key, out);
+        return out;
     });
 
     // backend-test has no edit endpoint: answer like Spring does for an unknown path.

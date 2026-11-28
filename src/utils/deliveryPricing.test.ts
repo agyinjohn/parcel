@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_PRICE_TABLE as T, estimateRoadKm, quoteFromTable, validateTable, weightSurcharge } from "./deliveryPricing";
+import { DEFAULT_PRICE_TABLE as T, estimateRoadKm, quoteFromTable, validateTable, weightSurcharge, zoneFor } from "./deliveryPricing";
 
 describe("quoteFromTable (bands)", () => {
     it("prices by the band the distance falls in", () => {
@@ -44,5 +44,31 @@ describe("estimateRoadKm / validateTable", () => {
         expect(validateTable(T)).toEqual([]);
         expect(validateTable({ ...T, bands: [{ upToKm: 3, price: 20 }, { upToKm: 6, price: 15 }] })).toContain("The 6 km band is cheaper than a shorter one.");
         expect(validateTable({ ...T, bands: [] })).toContain("Add at least one distance band.");
+    });
+});
+
+describe("zones", () => {
+    const Z = {
+        ...T,
+        zones: [
+            { name: "East Legon", lat: 5.637, lng: -0.165, radiusKm: 3, price: 20 },
+            { name: "A&C Mall", lat: 5.637, lng: -0.165, radiusKm: 0.5, price: 18 },
+        ],
+    };
+    it("uses the smallest zone containing the pin, plus weight", () => {
+        const q = quoteFromTable(Z, 13.5, { pin: { lat: 5.6372, lng: -0.1651 }, weightKg: 6 });
+        expect(q.zone).toBe("A&C Mall");
+        expect(q.lines.map((l) => l.amount)).toEqual([18, 5]);
+        expect(zoneFor(Z, { lat: 5.65, lng: -0.165 })?.name).toBe("East Legon");
+    });
+    it("falls back to distance outside every zone", () => {
+        const q = quoteFromTable(Z, 13.5, { pin: { lat: 5.55, lng: -0.25 } });
+        expect(q.zone).toBeUndefined();
+        expect(q.price).toBe(35);
+    });
+    it("validates zones", () => {
+        expect(validateTable({ ...Z, zones: [{ name: "", lat: 5, lng: 0, radiusKm: 0, price: 0 }] })).toEqual(
+            expect.arrayContaining(["Each zone needs a name.", "Zone needs a radius above 0 km.", "Zone needs a price above 0."]),
+        );
     });
 });

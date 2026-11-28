@@ -40,7 +40,7 @@ export const useDeliveryQuote = (enabled: boolean, pin: { lat: number; lng: numb
             if (cancelled) return;
             if (table.current && st?.latitude != null && st?.longitude != null) {
                 const km = estimateRoadKm({ lat: Number(st.latitude), lng: Number(st.longitude) }, pin);
-                setQuote(quoteFromTable(table.current, km, { weightKg, fragile, distanceSource: "ESTIMATE" }));
+                setQuote(quoteFromTable(table.current, km, { weightKg, fragile, distanceSource: "ESTIMATE", pin }));
             } else {
                 setQuote(null);
             }

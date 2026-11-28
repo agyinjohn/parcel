@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader, Plus, Save, Trash2 } from "lucide-react";
+import { ExternalLink, Loader, MapPin, Plus, Save, Trash2 } from "lucide-react";
+import { DeliveryLocationPicker, type DeliveryLocation } from "../../components/DeliveryLocationPicker";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { useToast } from "../../components/ui/toast";
@@ -23,6 +24,13 @@ export const DeliveryPricingPanel = () => {
     const [tryKm, setTryKm] = useState("7");
     const [tryKg, setTryKg] = useState("2");
     const [tryFragile, setTryFragile] = useState(false);
+    // New zone being added.
+    const [zoneCentre, setZoneCentre] = useState<DeliveryLocation | null>(null);
+    const [zoneName, setZoneName] = useState("");
+    const [zoneRadius, setZoneRadius] = useState("2");
+    const [zonePrice, setZonePrice] = useState("");
+    const [zoneCoords, setZoneCoords] = useState("");
+    const [mapsOk, setMapsOk] = useState(true);
 
     useEffect(() => {
         pricingService.getTable().then((r) => {
@@ -41,6 +49,23 @@ export const DeliveryPricingPanel = () => {
     const set = <K extends keyof DeliveryPriceTable>(k: K, v: DeliveryPriceTable[K]) => setT((x) => ({ ...x, [k]: v }));
     const setBand = (i: number, k: "upToKm" | "price", v: string) => set("bands", t.bands.map((b, j) => (j === i ? { ...b, [k]: numOr(v) } : b)));
     const setWeight = (i: number, k: "overKg" | "surcharge", v: string) => set("weightBands", t.weightBands.map((w, j) => (j === i ? { ...w, [k]: numOr(v) } : w)));
+
+    const zones = t.zones ?? [];
+    const setZone = (i: number, k: "name" | "radiusKm" | "price", v: string) =>
+        set("zones", zones.map((z, j) => (j === i ? { ...z, [k]: k === "name" ? v : numOr(v) } : z)));
+    const typedCentre = (() => {
+        const m = zoneCoords.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+        return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null;
+    })();
+    const centre = zoneCentre ?? typedCentre;
+    const addZone = () => {
+        if (!centre || !zoneName.trim() || !(numOr(zonePrice) > 0) || !(numOr(zoneRadius) > 0)) {
+            showToast("Choose the centre, and give the zone a name, radius and price", "error");
+            return;
+        }
+        set("zones", [...zones, { name: zoneName.trim(), lat: centre.lat, lng: centre.lng, radiusKm: numOr(zoneRadius), price: numOr(zonePrice) }]);
+        setZoneCentre(null); setZoneName(""); setZonePrice(""); setZoneCoords("");
+    };
 
     const save = async () => {
         if (errors.length) { showToast(errors[0], "error"); return; }
@@ -121,6 +146,47 @@ export const DeliveryPricingPanel = () => {
                             </div>
                         ))}
                         <button type="button" onClick={() => { const last = t.weightBands[t.weightBands.length - 1]; set("weightBands", [...t.weightBands, { overKg: (last?.overKg ?? 0) + 10, surcharge: (last?.surcharge ?? 0) + 5 }]); }} className="inline-flex items-center gap-1 text-xs font-semibold text-[#ea690c]"><Plus className="h-3.5 w-3.5" />Add weight band</button>
+                    </section>
+
+                    {/* Zones */}
+                    <section className="space-y-3 rounded-xl border border-[#e3e3e3] p-4">
+                        <div>
+                            <h3 className="text-sm font-semibold text-neutral-800">Zones <span className="font-normal text-[#9a9a9a]">(optional)</span></h3>
+                            <p className="text-xs text-[#9a9a9a]">A flat price for a named area, e.g. "East Legon GHC 20". A pin inside a zone gets the zone price instead of the distance price (weight and fragile still apply). If zones overlap, the smallest wins. Pins outside every zone use the distance price.</p>
+                        </div>
+                        {zones.length > 0 && (
+                            <>
+                                <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_auto_36px] gap-2 text-xs font-medium text-[#6b7280]"><span>Name</span><span>Radius (km)</span><span>Price (GHC)</span><span>Centre</span><span /></div>
+                                {zones.map((z, i) => (
+                                    <div key={i} className="grid grid-cols-[1.4fr_0.8fr_0.8fr_auto_36px] items-center gap-2">
+                                        <Input aria-label={`Zone ${i + 1} name`} value={z.name} onChange={(e) => setZone(i, "name", e.target.value)} className={inputCls} />
+                                        <Input aria-label={`Zone ${i + 1} radius`} type="number" min="0" step="0.1" value={z.radiusKm} onChange={(e) => setZone(i, "radiusKm", e.target.value)} className={inputCls} />
+                                        <Input aria-label={`Zone ${i + 1} price`} type="number" min="0" step="0.5" value={z.price} onChange={(e) => setZone(i, "price", e.target.value)} className={inputCls} />
+                                        <a href={`https://www.google.com/maps/search/?api=1&query=${z.lat},${z.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#ea690c] hover:underline"><ExternalLink className="h-3 w-3" />Map</a>
+                                        <button type="button" aria-label="Remove zone" onClick={() => set("zones", zones.filter((_, j) => j !== i))} className="rounded-lg p-2 text-[#9a9a9a] hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                        <div className="space-y-2 rounded-lg bg-[#fafafa] p-3">
+                            <p className="text-xs font-semibold text-neutral-700">Add a zone</p>
+                            {mapsOk ? (
+                                <DeliveryLocationPicker
+                                    value={zoneCentre}
+                                    onChange={(loc) => { setZoneCentre(loc); if (loc && !zoneName) setZoneName(loc.name); }}
+                                    onAvailabilityChange={setMapsOk}
+                                />
+                            ) : (
+                                <label className="block text-xs font-medium text-[#6b7280]">Centre (latitude, longitude)
+                                    <Input aria-label="Zone centre" value={zoneCoords} onChange={(e) => setZoneCoords(e.target.value)} placeholder="5.6370, -0.1650" className={cn(inputCls, "mt-1 bg-white")} /></label>
+                            )}
+                            <div className="grid grid-cols-[1.4fr_0.8fr_0.8fr_auto] items-end gap-2 text-xs font-medium text-[#6b7280]">
+                                <label>Name<Input aria-label="New zone name" value={zoneName} onChange={(e) => setZoneName(e.target.value)} placeholder="East Legon" className={cn(inputCls, "mt-1 bg-white")} /></label>
+                                <label>Radius (km)<Input aria-label="New zone radius" type="number" min="0" step="0.1" value={zoneRadius} onChange={(e) => setZoneRadius(e.target.value)} className={cn(inputCls, "mt-1 bg-white")} /></label>
+                                <label>Price (GHC)<Input aria-label="New zone price" type="number" min="0" step="0.5" value={zonePrice} onChange={(e) => setZonePrice(e.target.value)} className={cn(inputCls, "mt-1 bg-white")} /></label>
+                                <Button type="button" variant="outline" onClick={addZone} className="h-9 border-[#ea690c] text-[#ea690c]"><MapPin className="mr-1 h-4 w-4" />Add zone</Button>
+                            </div>
+                        </div>
                     </section>
 
                     <section className="grid grid-cols-2 gap-3 rounded-xl border border-[#e3e3e3] p-4 text-xs font-medium text-[#6b7280]">

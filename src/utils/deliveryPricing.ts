@@ -18,6 +18,15 @@ export interface WeightBand {
     surcharge: number;
 }
 
+/** A named area with a flat price: a circle around a point. The smallest zone containing the pin wins. */
+export interface PriceZone {
+    name: string;
+    lat: number;
+    lng: number;
+    radiusKm: number;
+    price: number;
+}
+
 export interface DeliveryPriceTable {
     mode: "BANDS" | "PER_KM";
     /** BANDS: price by distance band. Past the last band, `perKmBeyond` per extra km. */
@@ -28,6 +37,8 @@ export interface DeliveryPriceTable {
     perKm: number;
     minFee: number;
     weightBands: WeightBand[];
+    /** Optional named zones; a pin inside one gets its flat price instead of the distance price. */
+    zones?: PriceZone[];
     fragileFee: number;
     /** Round the total up to this step (e.g. 1 or 5 cedis). 0 = no rounding. */
     roundTo: number;
@@ -54,6 +65,7 @@ export const DEFAULT_PRICE_TABLE: DeliveryPriceTable = {
         { overKg: 10, surcharge: 10 },
         { overKg: 20, surcharge: 20 },
     ],
+    zones: [],
     fragileFee: 0,
     roundTo: 1,
 };
@@ -81,6 +93,8 @@ export interface PriceLine {
 export interface PriceQuote {
     distanceKm: number;
     distanceSource: "ROAD" | "ESTIMATE";
+    /** Set when the pin fell inside a zone and the zone price was used. */
+    zone?: string;
     lines: PriceLine[];
     price: number;
     tableVersion?: number;
@@ -114,14 +128,23 @@ export const weightSurcharge = (t: DeliveryPriceTable, kg?: number) => {
 
 const roundUp = (n: number, step: number) => (step > 0 ? Math.ceil(n / step - 1e-9) * step : n);
 
-/** Price a delivery from a table. `distanceKm` is road km when known. */
+/** The zone a pin falls in: the smallest containing zone, or undefined. */
+export const zoneFor = (t: DeliveryPriceTable, pin?: { lat: number; lng: number } | null): PriceZone | undefined => {
+    if (!pin || !t.zones?.length) return undefined;
+    return [...t.zones]
+        .filter((z) => z.radiusKm > 0 && straightLineKm({ lat: z.lat, lng: z.lng }, pin) <= z.radiusKm)
+        .sort((a, b) => a.radiusKm - b.radiusKm)[0];
+};
+
+/** Price a delivery from a table. `distanceKm` is road km when known; `pin` lets zones apply. */
 export const quoteFromTable = (
     t: DeliveryPriceTable,
     distanceKm: number,
-    opts: { weightKg?: number; fragile?: boolean; distanceSource?: "ROAD" | "ESTIMATE" } = {},
+    opts: { weightKg?: number; fragile?: boolean; distanceSource?: "ROAD" | "ESTIMATE"; pin?: { lat: number; lng: number } | null } = {},
 ): PriceQuote => {
     const km = Math.round(distanceKm * 10) / 10;
-    const d = distancePrice(t, km);
+    const zone = zoneFor(t, opts.pin);
+    const d = zone ? { amount: zone.price, label: `Zone: ${zone.name} (${km} km)` } : distancePrice(t, km);
     const lines: PriceLine[] = [{ label: d.label, amount: d.amount }];
     const w = weightSurcharge(t, opts.weightKg);
     if (w > 0) lines.push({ label: `Weight (${opts.weightKg} kg)`, amount: w });
@@ -129,7 +152,7 @@ export const quoteFromTable = (
     const sum = lines.reduce((s, l) => s + l.amount, 0);
     const price = r2(roundUp(sum, t.roundTo));
     if (price > sum + 1e-9) lines.push({ label: "Rounding", amount: r2(price - sum) });
-    return { distanceKm: km, distanceSource: opts.distanceSource ?? "ROAD", lines, price, tableVersion: t.version };
+    return { distanceKm: km, distanceSource: opts.distanceSource ?? "ROAD", zone: zone?.name, lines, price, tableVersion: t.version };
 };
 
 /** Problems that stop a table being saved. */
@@ -153,6 +176,14 @@ export const validateTable = (t: DeliveryPriceTable): string[] => {
     t.weightBands.forEach((w) => {
         if (!(w.overKg > 0) || !(w.surcharge >= 0)) errs.push("Weight bands need a weight above 0 kg and a surcharge of 0 or more.");
     });
+    (t.zones ?? []).forEach((z) => {
+        if (!z.name?.trim()) errs.push("Each zone needs a name.");
+        if (!(z.radiusKm > 0)) errs.push(`Zone ${z.name || ""} needs a radius above 0 km.`.replace("  ", " "));
+        if (!(z.price > 0)) errs.push(`Zone ${z.name || ""} needs a price above 0.`.replace("  ", " "));
+        if (!(Math.abs(z.lat) <= 90 && Math.abs(z.lng) <= 180)) errs.push(`Zone ${z.name || ""} has an invalid centre.`.replace("  ", " "));
+    });
+    const names = (t.zones ?? []).map((z) => z.name.trim().toLowerCase()).filter(Boolean);
+    if (new Set(names).size !== names.length) errs.push("Two zones have the same name.");
     if (!num(t.fragileFee) || !num(t.roundTo)) errs.push("Fragile fee and rounding can't be negative.");
     return Array.from(new Set(errs));
 };

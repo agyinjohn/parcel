@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity, Map as MapIcon, Wallet } from "lucide-react";
+import { X, LayoutDashboard, TrendingUp, Building2, Users, Package, DollarSignIcon, ScrollTextIcon, Fuel, BarChart2, Settings, Globe, LogOut, CreditCard, Scale, HandCoins, Activity, Map as MapIcon, Wallet, Calculator } from "lucide-react";
 import { API_V2 } from "../config/api";
 import { useStation } from "../contexts/StationContext";
 import { useBranding } from "../contexts/BrandingContext";
@@ -43,6 +43,7 @@ const navGroups: {
             { label: "Delivery Statistics",    path: "/admin/statistics",        icon: TrendingUp,      roles: BOTH },
             { label: "Financial Reports",      path: "/admin/financial-reports", icon: BarChart2,       roles: BOTH },
             // Counter cash and driver payment reports need the updated backend.
+            { label: "Delivery Pricing Review", path: "/admin/pricing-review", icon: Calculator as unknown as React.ComponentType<{ size?: number; className?: string }>, roles: BOTH },
             { label: "Cash & Driver Reports",  path: "/admin/cash-reports",      icon: Wallet as unknown as React.ComponentType<{ size?: number; className?: string }>, roles: API_V2 ? BOTH : [] },
             { label: "Fuel Requests",          path: "/admin/fuel-requests",     icon: Fuel,            roles: BOTH },
         ],

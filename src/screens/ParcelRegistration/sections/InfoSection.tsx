@@ -38,6 +38,7 @@ interface ParcelFormData {
     hasCalled?: boolean;
     images?: string[];
     parcelWeight?: number;
+    fragile?: boolean;
     /** Pinned drop-off point; required for home delivery when the map is available. */
     deliveryLocation?: DeliveryLocation;
     /** How the delivery price was set (distance-based pricing, stage 1). */
@@ -155,8 +156,9 @@ export const InfoSection = ({
     const [isDriverLocked, setIsDriverLocked] = useState(false);
     const [images, setImages] = useState<string[]>([]);
     const [parcelWeight, setParcelWeight] = useState<number | undefined>(undefined);
+    const [fragile, setFragile] = useState(false);
     // Suggested delivery price from distance and weight; staff may change it with a reason.
-    const { quote, loading: quoteLoading } = useDeliveryQuote(homeDelivery, deliveryLocation, parcelWeight);
+    const { quote, loading: quoteLoading } = useDeliveryQuote(homeDelivery, deliveryLocation, parcelWeight, fragile);
     const [overrideReason, setOverrideReason] = useState<OverrideReason | "">("");
     const lastSuggested = useRef<number | null>(null);
     useEffect(() => {
@@ -253,6 +255,8 @@ export const InfoSection = ({
             setIsDriverLocked(false);
             setImages([]);
             setParcelWeight(undefined);
+            setFragile(false);
+        setFragile(false);
         }
     }, [parcels.length, sessionDriver]);
 
@@ -362,6 +366,7 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            fragile: fragile || undefined,
             deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
             deliveryPricing: pricingInfo(),
         };
@@ -418,6 +423,7 @@ export const InfoSection = ({
         setSaveToAddressListChecked(false);
         setImages([]);
         setParcelWeight(undefined);
+        setFragile(false);
     };
 
     const handleSaveDirectly = () => {
@@ -454,6 +460,7 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
             images: images.length ? [...images] : undefined,
             parcelWeight: parcelWeight || undefined,
+            fragile: fragile || undefined,
             deliveryLocation: homeDelivery && deliveryLocation ? deliveryLocation : undefined,
             deliveryPricing: pricingInfo(),
         };
@@ -506,6 +513,7 @@ export const InfoSection = ({
         setPhoneError("");
         setImages([]);
         setParcelWeight(undefined);
+        setFragile(false);
     };
 
     // Check if driver fields are filled (considering locked state)
@@ -967,7 +975,7 @@ export const InfoSection = ({
                                                         <div className="space-y-1.5 rounded-lg border border-orange-100 bg-orange-50/60 px-2.5 py-2 text-xs" data-testid="delivery-quote">
                                                             <p className="text-neutral-700">
                                                                 Suggested <b className="text-[#ea690c]">GHC {quote.price.toFixed(2)}</b> · {quote.distanceKm} km {quote.distanceSource === "ESTIMATE" ? "(estimated)" : "by road"}
-                                                                {parcelWeight ? ` · ${parcelWeight} kg` : ""}
+                                                                {parcelWeight ? ` · ${parcelWeight} kg` : ""}{fragile ? " · fragile" : ""}
                                                             </p>
                                                             <p className="text-[#6b7280]">{quote.lines.map((l) => `${l.label} ${l.amount.toFixed(2)}`).join(" + ")}</p>
                                                             {priceOverridden && (
@@ -1045,6 +1053,11 @@ export const InfoSection = ({
                                         }}
                                         className="w-full md:w-48 px-3 py-2 rounded-lg border border-[#d1d1d1] bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     />
+                                    <label className="mt-1 flex w-fit cursor-pointer items-center gap-2 text-sm text-neutral-800">
+                                        <input type="checkbox" checked={fragile} onChange={(e) => setFragile(e.target.checked)} className="h-4 w-4 accent-[#ea690c]" />
+                                        Fragile: handle with care
+                                        <span className="text-xs text-[#9a9a9a]">(may add a handling fee to home delivery)</span>
+                                    </label>
                                 </div>
 
                                 <div className="flex flex-col gap-2 md:col-span-2">

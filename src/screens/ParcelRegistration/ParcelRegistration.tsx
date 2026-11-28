@@ -214,7 +214,7 @@
 //           pod: false,
 //           delivered: false,
 //           parcelAssigned: false,
-//           fragile: false,
+//           fragile: parcelData.fragile || false,
 //         };
 
 //         return frontdeskService.addParcel(parcelRequest);
@@ -417,6 +417,7 @@ interface ParcelFormData {
   parcelWeight?: number;
   deliveryLocation?: DeliveryLocation;
   deliveryPricing?: DeliveryPricingInfo;
+  fragile?: boolean;
 }
 
 const STORAGE_KEY_PARCELS = "parcel_registration_parcels";
