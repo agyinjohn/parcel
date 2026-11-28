@@ -1,17 +1,13 @@
 /**
  * Active Deliveries: turn rider assignments (GET /api-frontdesk/parcel-assignment) into
- * riders with the parcels they still have out. Only parcels not yet delivered or returned
- * count, and the assignment's real status (ASSIGNED / ACCEPTED / PICKED_UP) is kept.
+ * riders with the parcels they still have out. Only parcels not yet delivered or returned count.
+ * Riders don't accept assignments: once assigned, a parcel is out for delivery, so ASSIGNED,
+ * ACCEPTED and PICKED_UP are all treated the same.
  */
 
 export const ACTIVE_STATUSES = ["ASSIGNED", "ACCEPTED", "PICKED_UP"] as const;
 export type ActiveStatus = (typeof ACTIVE_STATUSES)[number];
 
-export const STATUS_LABEL: Record<ActiveStatus, string> = {
-    ASSIGNED: "Waiting for rider",
-    ACCEPTED: "Accepted by rider",
-    PICKED_UP: "Out for delivery",
-};
 
 export interface ActiveParcel {
     key: string;
@@ -41,7 +37,8 @@ export interface ActiveRider {
     name: string;
     phone?: string;
     parcels: ActiveParcel[];
-    counts: Record<ActiveStatus, number>;
+    /** Parcels out for a day or more. */
+    overdue: number;
     toCollect: number;
     oldestAssignedAt?: number;
 }
@@ -82,7 +79,7 @@ export const toActiveParcel = (a: any, p: any): ActiveParcel => {
 };
 
 /** Group active parcels by rider; riders with the most parcels first. */
-export const groupActive = (assignments: any[]): ActiveRider[] => {
+export const groupActive = (assignments: any[], now = Date.now()): ActiveRider[] => {
     const byRider = new Map<string, ActiveRider>();
     const seen = new Set<string>();
     assignments.forEach((a) => {
@@ -95,11 +92,11 @@ export const groupActive = (assignments: any[]): ActiveRider[] => {
             seen.add(item.key);
             let r = byRider.get(riderId);
             if (!r) {
-                r = { riderId, name: a.riderInfo?.riderName ?? a.riderName ?? "Unknown rider", phone: a.riderInfo?.riderPhoneNumber ?? a.riderPhoneNumber, parcels: [], counts: { ASSIGNED: 0, ACCEPTED: 0, PICKED_UP: 0 }, toCollect: 0 };
+                r = { riderId, name: a.riderInfo?.riderName ?? a.riderName ?? "Unknown rider", phone: a.riderInfo?.riderPhoneNumber ?? a.riderPhoneNumber, parcels: [], overdue: 0, toCollect: 0 };
                 byRider.set(riderId, r);
             }
             r.parcels.push(item);
-            r.counts[item.status]++;
+            if (sinceAssigned(item.assignedAt, now).stale) r.overdue++;
             r.toCollect = round2(r.toCollect + item.toCollect);
             if (item.assignedAt && (!r.oldestAssignedAt || item.assignedAt < r.oldestAssignedAt)) r.oldestAssignedAt = item.assignedAt;
         });

@@ -4,7 +4,7 @@ import { groupActive, sinceAssigned, toActiveParcel } from "./activeDeliveries";
 const parcel = (id: string, extra: Record<string, unknown> = {}) => ({ parcelId: id, receiverName: `R ${id}`, delivered: false, returned: false, deliveryCost: 20, inboundCost: 10, ...extra });
 
 describe("groupActive", () => {
-    it("keeps only undelivered, unreturned parcels on active assignments, with the real status", () => {
+    it("keeps only undelivered, unreturned parcels on active assignments (any of ASSIGNED, ACCEPTED, PICKED_UP)", () => {
         const riders = groupActive([
             { assignmentId: "a1", status: "PICKED_UP", riderInfo: { riderId: "r1", riderName: "Kwame" }, parcels: [parcel("P1"), parcel("P2", { delivered: true })] },
             { assignmentId: "a2", status: "ASSIGNED", riderInfo: { riderId: "r1", riderName: "Kwame" }, parcels: [parcel("P3")] },
@@ -12,9 +12,14 @@ describe("groupActive", () => {
             { assignmentId: "a4", status: "ACCEPTED", riderInfo: { riderId: "r2", riderName: "Ama" }, parcels: [parcel("P5", { returned: true })] },
         ]);
         expect(riders).toHaveLength(1);
-        expect(riders[0].parcels.map((p) => `${p.parcelId}:${p.status}`)).toEqual(["P1:PICKED_UP", "P3:ASSIGNED"]);
-        expect(riders[0].counts).toEqual({ ASSIGNED: 1, ACCEPTED: 0, PICKED_UP: 1 });
+        expect(riders[0].parcels.map((p) => p.parcelId)).toEqual(["P1", "P3"]);
         expect(riders[0].toCollect).toBe(60);
+    });
+
+    it("counts parcels out for a day or more", () => {
+        const now = 200 * 3_600_000;
+        const r = groupActive([{ assignmentId: "a", status: "ASSIGNED", riderInfo: { riderId: "r" }, assignedAt: now - 30 * 3_600_000, parcels: [parcel("P1"), parcel("P2")] }], now);
+        expect(r[0].overdue).toBe(2);
     });
 
     it("treats a missing delivered flag as not delivered and ignores duplicates", () => {

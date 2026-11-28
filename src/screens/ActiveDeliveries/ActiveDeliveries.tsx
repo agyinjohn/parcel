@@ -10,13 +10,7 @@ import { useToast } from "../../components/ui/toast";
 import { formatCurrency, formatPhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
 import riderService from "../../services/riderService";
-import { STATUS_LABEL, groupActive, sinceAssigned, type ActiveParcel, type ActiveRider, type ActiveStatus } from "./activeDeliveries";
-
-const STATUS_CHIP: Record<ActiveStatus, string> = {
-    ASSIGNED: "bg-amber-50 text-amber-800 ring-amber-200",
-    ACCEPTED: "bg-blue-50 text-blue-800 ring-blue-200",
-    PICKED_UP: "bg-green-50 text-green-800 ring-green-200",
-};
+import { groupActive, sinceAssigned, type ActiveParcel, type ActiveRider } from "./activeDeliveries";
 const FAIL_REASONS = ["Customer not reachable", "Customer not available", "Wrong or incomplete address", "Customer refused the parcel", "Customer asked to reschedule", "Other"];
 const initials = (n: string) => n.split(" ").filter(Boolean).map((x) => x[0]).join("").slice(0, 2).toUpperCase();
 
@@ -32,7 +26,7 @@ export const ActiveDeliveries = (): JSX.Element => {
     const [error, setError] = useState<string | null>(null);
     const [loadedAt, setLoadedAt] = useState<number | null>(null);
     const [search, setSearch] = useState("");
-    const [status, setStatus] = useState<ActiveStatus | "all">("all");
+    const [onlyOverdue, setOnlyOverdue] = useState(false);
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
     const [delivering, setDelivering] = useState<ActiveParcel | null>(null);
     const [failing, setFailing] = useState<ActiveParcel | null>(null);
@@ -59,20 +53,19 @@ export const ActiveDeliveries = (): JSX.Element => {
             .map((r) => ({
                 ...r,
                 parcels: r.parcels.filter((p) =>
-                    (status === "all" || p.status === status) &&
+                    (!onlyOverdue || sinceAssigned(p.assignedAt).stale) &&
                     (!q || p.parcelId.toLowerCase().includes(q) || p.receiverName?.toLowerCase().includes(q) || p.receiverPhone?.includes(q) || r.name.toLowerCase().includes(q))),
             }))
             .filter((r) => r.parcels.length > 0);
-    }, [riders, search, status]);
+    }, [riders, search, onlyOverdue]);
 
     const totals = useMemo(() => {
         const all = riders.flatMap((r) => r.parcels);
         return {
             parcels: all.length,
             riders: riders.length,
-            waiting: all.filter((p) => p.status === "ASSIGNED").length,
-            out: all.filter((p) => p.status === "PICKED_UP").length,
             stale: all.filter((p) => sinceAssigned(p.assignedAt).stale).length,
+            today: all.filter((p) => p.assignedAt && new Date(p.assignedAt).toDateString() === new Date().toDateString()).length,
             toCollect: Math.round(all.reduce((s, p) => s + p.toCollect, 0) * 100) / 100,
         };
     }, [riders]);
@@ -105,9 +98,9 @@ export const ActiveDeliveries = (): JSX.Element => {
                 {/* Summary */}
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     {[
-                        ["Parcels out", String(totals.parcels), `with ${totals.riders} rider${totals.riders === 1 ? "" : "s"}`, "text-neutral-900"],
-                        ["Waiting for rider", String(totals.waiting), "assigned, not yet accepted", "text-amber-700"],
-                        ["Out for delivery", String(totals.out), totals.stale ? `${totals.stale} out for over a day` : "picked up by the rider", totals.stale ? "text-red-600" : "text-green-700"],
+                        ["Out for delivery", String(totals.parcels), `parcels with riders`, "text-neutral-900"],
+                        ["Riders out", String(totals.riders), `${totals.today} parcel${totals.today === 1 ? "" : "s"} assigned today`, "text-neutral-900"],
+                        ["Out over a day", String(totals.stale), totals.stale ? "follow up with the rider" : "none overdue", totals.stale ? "text-red-600" : "text-green-700"],
                         ["To collect", formatCurrency(totals.toCollect), "riders should bring back", "text-[#ea690c]"],
                     ].map(([label, v, sub, cls]) => (
                         <div key={label} className="rounded-xl border border-[#e5e7eb] bg-white px-4 py-3">
@@ -127,9 +120,9 @@ export const ActiveDeliveries = (): JSX.Element => {
                             {search && <button onClick={() => setSearch("")} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-neutral-800"><XIcon className="h-4 w-4" /></button>}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                            {([["all", "All"], ["ASSIGNED", "Waiting for rider"], ["ACCEPTED", "Accepted"], ["PICKED_UP", "Out for delivery"]] as const).map(([v, l]) => (
-                                <button key={v} onClick={() => setStatus(v)} aria-pressed={status === v}
-                                    className={`rounded-full border px-3 py-1 text-xs ${status === v ? "border-orange-200 bg-orange-50 font-semibold text-[#ea690c]" : "border-[#e5e7eb] text-neutral-600 hover:bg-gray-50"}`}>{l}</button>
+                            {([[false, "All"], [true, "Out over a day"]] as const).map(([v, l]) => (
+                                <button key={l} onClick={() => setOnlyOverdue(v)} aria-pressed={onlyOverdue === v}
+                                    className={`rounded-full border px-3 py-1 text-xs ${onlyOverdue === v ? "border-orange-200 bg-orange-50 font-semibold text-[#ea690c]" : "border-[#e5e7eb] text-neutral-600 hover:bg-gray-50"}`}>{l}</button>
                             ))}
                         </div>
                         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="border-[#d1d1d1]" aria-label="Refresh">
@@ -147,7 +140,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                     <Card className="border border-[#e5e7eb] bg-white"><CardContent className="py-14 text-center">
                         <PackageIcon className="mx-auto mb-3 h-12 w-12 text-gray-300" />
                         <p className="font-medium text-neutral-700">{riders.length === 0 ? "No parcels are out with riders" : "Nothing matches your search"}</p>
-                        <p className="mt-1 text-sm text-[#6b7280]">{riders.length === 0 ? "Assign parcels to riders in Package Assignments to see them here." : "Try a different search or status."}</p>
+                        <p className="mt-1 text-sm text-[#6b7280]">{riders.length === 0 ? "Assign parcels to riders in Package Assignments to see them here." : "Try a different search or filter."}</p>
                     </CardContent></Card>
                 ) : (
                     filtered.map((r) => {
@@ -162,9 +155,8 @@ export const ActiveDeliveries = (): JSX.Element => {
                                         <span className="block text-xs text-[#6b7280]">{r.phone ? formatPhoneNumber(r.phone) : ""}{oldest.text ? ` · oldest assigned ${oldest.text}` : ""}</span>
                                     </span>
                                     <span className="flex gap-4 text-center">
-                                        {([["ASSIGNED", "Waiting", "text-amber-700"], ["ACCEPTED", "Accepted", "text-blue-700"], ["PICKED_UP", "Out", "text-green-700"]] as const).map(([k, l, c]) => (
-                                            <span key={k}><span className="block text-[11px] text-[#6b7280]">{l}</span><span className={`block text-lg font-bold tabular-nums ${c}`}>{r.counts[k]}</span></span>
-                                        ))}
+                                        <span><span className="block text-[11px] text-[#6b7280]">Parcels</span><span className="block text-lg font-bold tabular-nums text-neutral-900">{r.parcels.length}</span></span>
+                                        <span><span className="block text-[11px] text-[#6b7280]">Over a day</span><span className={`block text-lg font-bold tabular-nums ${r.overdue ? "text-red-600" : "text-gray-400"}`}>{r.overdue}</span></span>
                                         <span><span className="block text-[11px] text-[#6b7280]">To collect</span><span className="block text-lg font-bold tabular-nums text-[#ea690c]">{formatCurrency(r.toCollect)}</span></span>
                                     </span>
                                     {open ? <ChevronDownIcon className="h-5 w-5 text-gray-400" /> : <ChevronRightIcon className="h-5 w-5 text-gray-400" />}
@@ -178,7 +170,6 @@ export const ActiveDeliveries = (): JSX.Element => {
                                                     <div className="min-w-0 space-y-1">
                                                         <div className="flex flex-wrap items-center gap-2">
                                                             <span className="font-mono text-xs font-semibold text-neutral-700">{p.parcelId}</span>
-                                                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
                                                             {since.text && (
                                                                 <span className={`inline-flex items-center gap-1 text-[11px] ${since.stale ? "font-semibold text-red-600" : "text-[#9a9a9a]"}`}>
                                                                     {since.stale ? <AlertTriangle className="h-3 w-3" /> : <ClockIcon className="h-3 w-3" />}assigned {since.text}
