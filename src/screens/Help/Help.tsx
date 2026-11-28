@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
     SearchIcon, InboxIcon, ArrowDownToLine, ArrowUpFromLine,
-    CarIcon, Layers, ZapIcon, Settings2,
+    CarIcon, Layers, Settings2,
 } from "lucide-react";
 
 interface Section {
@@ -167,21 +167,6 @@ const SECTIONS: Section[] = [
             {
                 heading: "Deleting a shelf",
                 body: "Click the delete icon on a shelf card. A shelf can only be deleted if it has no parcels assigned to it.",
-            },
-        ],
-    },
-    {
-        id: "smart-search",
-        icon: ZapIcon,
-        title: "Smart Search",
-        steps: [
-            {
-                heading: "What it does",
-                body: "Smart Search lets you find parcels across all stations, not just your own. Useful for tracking a parcel that may have been registered at a different branch.",
-            },
-            {
-                heading: "How to search",
-                body: "Enter a parcel ID, recipient name, or phone number. Results will show the parcel's current location, status, and which station it belongs to.",
             },
         ],
     },

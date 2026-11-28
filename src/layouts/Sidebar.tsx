@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit,  PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon, Fuel, TrendingUp, LayoutDashboard, BarChart2 } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit,  PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, Fuel, TrendingUp, LayoutDashboard, BarChart2 } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -37,7 +37,6 @@ const navItems = [
     { label: "Analytics", path: "/reconciliation-analytics", icon: BarChart2, roles: ["MANAGER",] },
 
     // Bottom section - Management tools
-    { label: "Smart Search", path: "/smart-search", icon: ZapIcon, roles: ["FRONTDESK", "MANAGER", "ADMIN", "CALLER"] },
     { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Shelf and Address", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
 ];

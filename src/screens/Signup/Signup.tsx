@@ -111,9 +111,22 @@ export const Signup = (): JSX.Element => {
         setSubmitting(false);
         if (result.success) {
             setDone(true);
-        } else {
-            setSubmitError(result.message);
+            return;
         }
+        // Put backend messages on the field they belong to.
+        const keyMap: Record<string, string> = {
+            companyName: "companyName", registerUserName: "fullName", workEmail: "email", phoneNumber: "phone", password: "password",
+        };
+        const fieldErrs: Record<string, string> = {};
+        Object.entries(result.fieldErrors || {}).forEach(([k, v]) => { if (keyMap[k]) fieldErrs[keyMap[k]] = String(v); });
+        if (result.status === 409) {
+            const m = result.message.toLowerCase();
+            if (m.includes("name")) fieldErrs.companyName = result.message;
+            else if (m.includes("email")) fieldErrs.email = result.message;
+            else if (m.includes("phone")) fieldErrs.phone = result.message;
+        }
+        if (Object.keys(fieldErrs).length) setErrors(e => ({ ...e, ...fieldErrs }));
+        setSubmitError(Object.keys(fieldErrs).length ? "Please fix the highlighted fields." : result.message);
     };
 
     const handleResend = async () => {

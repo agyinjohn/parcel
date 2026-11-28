@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
     AlertCircle, ArrowRight, CheckCircle2, Loader, Package, XCircle,
@@ -20,7 +20,12 @@ export const VerifyEmail = (): JSX.Element => {
     const [resending, setResending] = useState(false);
     const [resendMessage, setResendMessage] = useState("");
 
+    // A verification token works once; don't send it twice (React StrictMode runs effects twice in dev).
+    const sentFor = useRef<string | null>(null);
+
     useEffect(() => {
+        if (sentFor.current === token) return;
+        sentFor.current = token;
         if (!token) {
             setStatus("error");
             setMessage("This verification link is missing its token. Please use the link from your email.");
