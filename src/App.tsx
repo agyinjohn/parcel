@@ -31,7 +31,6 @@ import { ParcelCostsAndPOD } from "./screens/ParcelCostsAndPOD";
 import { ParcelReview } from "./screens/ParcelReview";
 import { ParcelSMSSuccess } from "./screens/ParcelSMSSuccess";
 import { ParcelSelection } from "./screens/ParcelSelection";
-import { ParcelRiderSelection } from "./screens/ParcelRiderSelection";
 import { ActiveDeliveries } from "./screens/ActiveDeliveries";
 import { RiderDashboard } from "./screens/RiderDashboard";
 import { RiderHistory } from "./screens/RiderHistory";
@@ -153,7 +152,7 @@ export const App = (): JSX.Element => {
                                   DELIVERY HUB  /delivery/*
                               ════════════════════════════════ */}
                               <Route path="/delivery/assignments" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelSelection /></DeliveryLayout></ProtectedRoute>} />
-                              <Route path="/delivery/rider-selection" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ParcelRiderSelection /></DeliveryLayout></ProtectedRoute>} />
+                              <Route path="/delivery/rider-selection" element={<Navigate to="/delivery/assignments" replace />} />
                               <Route path="/delivery/active" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ActiveDeliveries /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/reconciliation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><Reconciliation /></DeliveryLayout></ProtectedRoute>} />
                               <Route path="/delivery/reconciliation-confirmation" element={<ProtectedRoute allowedRoles={["MANAGER"]}><DeliveryLayout><ReconciliationConfirmation /></DeliveryLayout></ProtectedRoute>} />
@@ -226,7 +225,7 @@ export const App = (): JSX.Element => {
                               <Route path="/driver-tracker/:phoneKey" element={<Navigate to="/parcel/driver-tracker" replace />} />
                               <Route path="/smart-search" element={<Navigate to="/parcel/search" replace />} />
                               <Route path="/package-assignments" element={<Navigate to="/delivery/assignments" replace />} />
-                              <Route path="/rider-selection" element={<Navigate to="/delivery/rider-selection" replace />} />
+                              <Route path="/rider-selection" element={<Navigate to="/delivery/assignments" replace />} />
                               <Route path="/active-deliveries" element={<Navigate to="/delivery/active" replace />} />
                               <Route path="/reconciliation" element={<Navigate to="/delivery/reconciliation" replace />} />
                               <Route path="/reconciliation-history" element={<Navigate to="/delivery/reconciliation" replace />} />

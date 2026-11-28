@@ -10,7 +10,7 @@ import { useToast } from "../../components/ui/toast";
 import { formatCurrency, formatPhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
 import riderService from "../../services/riderService";
-import { groupActive, sinceAssigned, type ActiveParcel, type ActiveRider } from "./activeDeliveries";
+import { duplicateCount, groupActive, sinceAssigned, type ActiveParcel, type ActiveRider } from "./activeDeliveries";
 const FAIL_REASONS = ["Customer not reachable", "Customer not available", "Wrong or incomplete address", "Customer refused the parcel", "Customer asked to reschedule", "Other"];
 const initials = (n: string) => n.split(" ").filter(Boolean).map((x) => x[0]).join("").slice(0, 2).toUpperCase();
 
@@ -132,6 +132,13 @@ export const ActiveDeliveries = (): JSX.Element => {
                 </Card>
                 {loadedAt && <p className="-mt-3 text-xs text-[#9a9a9a]">Updated {new Date(loadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
 
+                {duplicateCount(riders) > 0 && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span><b>{duplicateCount(riders)} parcel{duplicateCount(riders) === 1 ? " is" : "s are"} assigned more than once.</b> Each is listed once below, under its latest rider, and counted once. Check with the riders named on the red line who actually has the parcel.</span>
+                    </div>
+                )}
+
                 {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error} <button onClick={load} className="font-semibold underline">Try again</button></div>}
 
                 {loading && riders.length === 0 ? (
@@ -190,6 +197,12 @@ export const ActiveDeliveries = (): JSX.Element => {
                                                             </span>
                                                         </p>
                                                         {p.description && <p className="text-xs text-[#9a9a9a]">Item: {p.description}</p>}
+                                                        {p.alsoWith?.length ? (
+                                                            <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
+                                                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                                                Also assigned to {p.alsoWith.map((o) => o.riderName).join(", ")}: duplicate assignment
+                                                            </p>
+                                                        ) : null}
                                                     </div>
                                                     <div className="rounded-lg border border-[#ececec] bg-[#fafafa] px-3 py-2 text-xs">
                                                         {p.charges.map((c) => <div key={c.label} className="flex justify-between"><span className="text-[#6b7280]">{c.label}</span><span className="tabular-nums">{c.amount.toFixed(2)}</span></div>)}

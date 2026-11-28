@@ -295,7 +295,20 @@ class RiderService {
                 }
             });
 
-            const mappedContent = flattenedAssignments;
+            // A parcel on two active assignments (a duplicate) is shown once, under the newest one,
+            // so the rider doesn't deliver or collect for it twice. Finished history is left alone.
+            const ACTIVE = new Set(["ASSIGNED", "ACCEPTED", "PICKED_UP"]);
+            const newestActive = new Map<string, RiderAssignmentResponse>();
+            flattenedAssignments.forEach((a) => {
+                const id = a.parcel?.parcelId;
+                if (!id || !ACTIVE.has(a.status)) return;
+                const cur = newestActive.get(id);
+                if (!cur || (a.assignedAt || 0) > (cur.assignedAt || 0)) newestActive.set(id, a);
+            });
+            const mappedContent = flattenedAssignments.filter((a) => {
+                const id = a.parcel?.parcelId;
+                return !id || !ACTIVE.has(a.status) || newestActive.get(id) === a;
+            });
 
             console.log('Mapped assignments:', mappedContent.length);
             console.log('Original assignments count:', items.length);

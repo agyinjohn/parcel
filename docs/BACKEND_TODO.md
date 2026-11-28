@@ -8,6 +8,7 @@ Work in this order:
 3. **New:** company signup email link.
 4. **New:** paying POD money out to the sender.
 5. **New:** riders don't accept assignments.
+5a. **New:** stop the same parcel being assigned twice.
 6. **Release to production.**
 7. **Next features**, which are planned.
 
@@ -104,6 +105,21 @@ The business rule is that riders don't accept or reject parcels: once a parcel i
 - **Allow** a rider assignment to go straight from `ASSIGNED` to `PICKED_UP`, `DELIVERED` or `RETURNED` (on `PUT /api-rider/assignments/{assignmentId}/status` and the manager version). Please confirm the server doesn't require `ACCEPTED` first.
 - **Don't let a rider decline or unassign** themselves. Only a manager can reassign or return a parcel.
 - `ACCEPTED` can stay in the enum for old records, but nothing new needs to set it.
+
+---
+
+## 5a. Stop the same parcel being assigned twice (new)
+
+Parcels sometimes end up on two active rider assignments. The frontend now checks with the server just before assigning, blocks double clicks, and flags duplicates on Active Deliveries. It can't close the gap fully: two managers (or two tabs) clicking at the same moment both pass the check. Only the server can stop that.
+
+**On `POST /api-frontdesk/assign-parcels`:**
+- **Reject** with **409** if any parcel is already on an assignment with status `ASSIGNED`, `ACCEPTED` or `PICKED_UP`, or is delivered, returned or picked up at the counter. Assign nothing in that case, and name the parcels in the message: `"Already with a rider: PF240037 (Yaw Darko)"`.
+- **Do the check and the insert in one transaction**, or with a unique index on active parcel assignments (e.g. a unique `activeAssignmentId` on the parcel, set when assigned and cleared on deliver or return). A read-then-write without a lock still lets two requests through.
+- **Reject repeated IDs** in the same request (`["P1", "P1"]`) with 400.
+- **Set `parcelAssigned = true` and the rider info** on the parcel in the same transaction, so `GET /parcels/home-delivery` stops listing it straight away.
+- **Optional:** accept an `Idempotency-Key` header, so a request retried after a timeout returns the first result instead of creating a second assignment.
+
+**Clean up existing duplicates:** list parcels that are on more than one active assignment, and close the extra ones (keep the one the rider is actually delivering). Active Deliveries now shows them with a red "duplicate assignment" line.
 
 ---
 
