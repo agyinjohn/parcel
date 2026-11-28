@@ -8,7 +8,8 @@ Work in this order:
 3. **New:** company signup email link.
 4. **New:** paying POD money out to the sender.
 5. **New:** riders don't accept assignments.
-5a. **New:** stop the same parcel being assigned twice.
+5a. **New:** never give a rider the same parcel twice.
+5b. **New:** customer pages (tracking, SMS link, delivery requests), including a data leak to fix now.
 6. **Release to production.**
 7. **Next features**, which are planned.
 
@@ -108,18 +109,108 @@ The business rule is that riders don't accept or reject parcels: once a parcel i
 
 ---
 
-## 5a. Stop the same parcel being assigned twice (new)
+## 5a. Never give a rider the same parcel twice (new)
 
-Parcels sometimes end up on two active rider assignments. The frontend now checks with the server just before assigning, blocks double clicks, and flags duplicates on Active Deliveries. It can't close the gap fully: two managers (or two tabs) clicking at the same moment both pass the check. Only the server can stop that.
+Parcels sometimes end up on a rider's list twice. **The rule:** a parcel can be on only **one** active assignment (`ASSIGNED`, `ACCEPTED`, `PICKED_UP`). A manager may move it to a **different** rider, but never assign it again to the rider who already has it.
+
+The frontend now:
+- checks with the server just before assigning;
+- greys out the rider who already holds a parcel;
+- blocks double clicks;
+- flags duplicates on Active Deliveries.
+
+It can't fully close the gap: two managers (or two tabs) clicking at the same moment both pass the check. Only the server can stop that.
 
 **On `POST /api-frontdesk/assign-parcels`:**
-- **Reject** with **409** if any parcel is already on an assignment with status `ASSIGNED`, `ACCEPTED` or `PICKED_UP`, or is delivered, returned or picked up at the counter. Assign nothing in that case, and name the parcels in the message: `"Already with a rider: PF240037 (Yaw Darko)"`.
-- **Do the check and the insert in one transaction**, or with a unique index on active parcel assignments (e.g. a unique `activeAssignmentId` on the parcel, set when assigned and cleared on deliver or return). A read-then-write without a lock still lets two requests through.
+- **Same rider:** if the chosen rider already has any of the parcels on an active assignment, reject with **409** and assign nothing: `"Kwame Asante already has PF240037"`.
+- **Different rider (reassign):** close the parcel's current active assignment for the old rider (e.g. `CANCELLED`, reason "Reassigned") in the same step, so only the new one is active.
+- **Finished parcels:** reject with 409 any parcel that's delivered, returned or picked up at the counter.
+- **Do it in one transaction**, or with a unique index on active parcel assignments (e.g. a unique `activeAssignmentId` on the parcel, set when assigned and cleared on deliver, return or reassign). A read-then-write without a lock still lets two requests through.
 - **Reject repeated IDs** in the same request (`["P1", "P1"]`) with 400.
-- **Set `parcelAssigned = true` and the rider info** on the parcel in the same transaction, so `GET /parcels/home-delivery` stops listing it straight away.
+- **Set `parcelAssigned = true` and the rider info** on the parcel in the same transaction.
 - **Optional:** accept an `Idempotency-Key` header, so a request retried after a timeout returns the first result instead of creating a second assignment.
 
-**Clean up existing duplicates:** list parcels that are on more than one active assignment, and close the extra ones (keep the one the rider is actually delivering). Active Deliveries now shows them with a red "duplicate assignment" line.
+**Clean up existing duplicates:** list parcels on more than one active assignment and close the extra ones. Active Deliveries shows them with a red "duplicate assignment" line.
+
+---
+
+## 5b. Customer pages: tracking, SMS link and delivery requests (new)
+
+The customer page is `/receive` (`/track` now opens it too). It's rebuilt to show everything about a parcel:
+- status and journey;
+- the station holding it, with address, phone, opening hours, a map and directions;
+- the delivery location on a map;
+- the rider when out for delivery;
+- charges line by line;
+- the parcel details.
+
+**Delivery booking was not working:** customers paid by Paystack, but nothing was sent to the backend, so no one knew to deliver. The frontend now calls the endpoints below. Until they exist, it shows "Online delivery booking isn't available yet, please call the station" and **takes no payment**. Try it with `npm run dev:mock` and open `/receive?t=demo-link`.
+
+### Fix now: the parcel search leaks staff data
+
+`GET /api-user/parcel-search?phoneNumber=` needs no login and returns the **full** parcel record to anyone who types a phone number: `senderPhoneNumber`, `driverPhoneNumber`, `callerName`, `callCenterRemark`, `companyId` and more. Return a customer view instead:
+- `parcelId`, `parcelDescription`, `typeofParcel`, `numberOfItems`, `parcelWeight`, `fragile`;
+- `senderName`, `receiverName`, `receiverAddress` and the receiver location fields;
+- `shelfName`, `hasArrivedAtOffice`, `parcelAssigned`, `homeDelivery`, `delivered`, `pickedUp`;
+- the charges (`inboundCost`, `storageCost`, `deliveryCost`, `pickUpCost`, `inboudPayed`, `pod`, `itemCost`), `createdAt` and `updatedAt`;
+- `riderInfo` (name and phone) only while it's out for delivery.
+
+**Add the station** so the page can show where the parcel is (the station list needs a login, so the page can't look it up):
+
+```json
+"office": { "id": "...", "name": "Accra Central", "address": "12 Kojo Thompson Rd, Adabraka",
+            "phoneNumber": "+233...", "latitude": 5.5571, "longitude": -0.2058, "openingHours": "Mon–Sat, 8am–6pm" }
+```
+
+Do the same for `GET /api-tracking/{parcelId}/track`, which today returns only status and dates, with `fromOfficeName` and `toOfficeName` both null.
+
+### The SMS link
+
+When a parcel arrives (and when it's assigned to a rider), the SMS to the receiver should contain a link: `<frontend address>/receive?t=<token>`.
+- **Token:** random, at least 128 bits, stored against the receiver's phone number, valid for 14 days. Don't put the phone number or the parcel ID in plain text.
+- **`GET /api-user/customer-links/{token}`** → `{ "phoneNumber": "+233...", "receiverName": "...", "parcels": [ customer view, as above ] }`, with all of that phone's parcels that aren't finished or returned. 404 if expired or unknown.
+- Optionally add `&parcel=<parcelId>` to the link to open that parcel directly.
+
+### One-time code (for customers who search instead of using the link)
+
+Searching shows the parcels. Booking a delivery needs proof that the customer holds the phone, otherwise anyone could pay a small fee and have someone else's parcel delivered to them.
+- **`POST /api-user/customer-otp/send`** `{ "phoneNumber": "+233..." }`: SMS a 6-digit code, valid for 5 minutes. Allow at most 3 sends per phone per 15 minutes, and return 404 if the phone has no parcels.
+- **`POST /api-user/customer-otp/verify`** `{ "phoneNumber", "code" }` → `{ "token": "..." }`, the same kind of token as the SMS link (valid for a few hours). Lock the code after 5 wrong tries.
+
+### Delivery price and request
+
+**`POST /api-user/delivery-requests/quote`**
+
+```json
+{ "token": "...", "phoneNumber": "+233...", "parcelIds": ["PF..."], "latitude": 5.60, "longitude": -0.18 }
+```
+
+returns:
+
+```json
+{ "deliveryFee": 15.0, "parcelCharges": 20.0, "total": 35.0, "quoteId": "..." }
+```
+
+- `deliveryFee` comes from the station's delivery pricing for that distance; `parcelCharges` is whatever is still owed (unpaid inbound, storage, pickup fee, POD item value).
+- Keep the quote for 30 minutes.
+- **401** if the token doesn't match the phone; **403** if a parcel isn't that phone's; **409** if a parcel is delivered, collected, already with a rider or already booked for delivery.
+
+**`POST /api-user/delivery-requests`**
+
+```json
+{ "token": "...", "phoneNumber": "+233...", "parcelIds": ["PF..."], "latitude": 5.60, "longitude": -0.18,
+  "address": "...", "notes": "Blue gate near the main road", "scheduledDate": "2026-11-30", "scheduledTime": "14:00",
+  "quoteId": "...", "amountPaid": 35.0, "paystackReference": "MNM-DLV-..." }
+```
+
+returns `{ "requestId": "...", "status": "PENDING" }`.
+- **Verify the payment** with Paystack (`GET https://api.paystack.co/transaction/verify/{reference}` with the secret key). It must be `success`, in GHS, for at least the quoted total. Each reference can be used once.
+- On success:
+  - set `homeDelivery = true` and the receiver location fields from the pin;
+  - record the payment against the parcels, so the rider doesn't collect again;
+  - mark it as a customer request, so it shows in the station's ready-to-assign list.
+- **Same checks as the quote.** If anything fails after the payment was verified, keep the record and refund or flag it for the station. The page tells the customer to call the station with the payment reference.
+- **Schedule:** when parcels haven't arrived yet, `scheduledDate` and `scheduledTime` say when to deliver once they have.
 
 ---
 

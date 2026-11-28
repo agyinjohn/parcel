@@ -63,7 +63,6 @@ import { DeliveryIncome } from "./screens/Admin/DeliveryIncome/DeliveryIncome";
 import { DeliveryAccountability } from "./screens/Admin/DeliveryAccountability/DeliveryAccountability";
 import { TenantManagement } from "./screens/Admin/TenantManagement/TenantManagement";
 import { CrossTenantAnalytics } from "./screens/Admin/CrossTenantAnalytics/CrossTenantAnalytics";
-import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
 import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
 import { CustomerAuthProvider } from "./contexts/CustomerAuthContext";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
@@ -110,7 +109,7 @@ export const App = (): JSX.Element => {
                               <Route path="/reset-password" element={<ResetPassword />} />
 
                               {/* ── Public ── */}
-                              <Route path="/track" element={<TrackParcel />} />
+                              <Route path="/track" element={<Navigate to="/receive" replace />} />
                               <Route path="/p/:parcelId" element={<ParcelScan />} />
                               <Route path="/scan" element={<ParcelScan />} />
                               <Route path="/receive" element={<CustomerAuthProvider><CustomerParcelHub /></CustomerAuthProvider>} />

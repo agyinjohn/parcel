@@ -2,7 +2,7 @@ import type { CustomerParcel } from "../../services/customerService";
 
 export type TrackStep = "search" | "otp" | "list" | "detail";
 
-export type ParcelDisplayStatus = "ready" | "in_progress" | "delivered" | "out_for_delivery";
+export type ParcelDisplayStatus = "ready" | "in_progress" | "delivered" | "out_for_delivery" | "collected";
 
 export interface GpsCoordinates {
   latitude: number;
@@ -21,12 +21,16 @@ export interface ParcelTimelineEvent {
 export interface EnrichedParcel extends CustomerParcel {
   displayStatus: ParcelDisplayStatus;
   statusLabel: string;
+  /** One line telling the customer what happens next. */
+  statusHint: string;
   branchName: string;
-  pickupCode: string;
   arrivedAt: number | null;
-  storageDays: number;
-  freeStorageDays: number;
   timeline: ParcelTimelineEvent[];
+}
+
+export interface ChargeLine {
+  label: string;
+  amount: number;
 }
 
 export function formatTrackCurrency(amount: number | null | undefined): string {
@@ -63,34 +67,58 @@ export function maskPhone(phone: string): string {
   return `+233 ${local.slice(0, 2)}••••${local.slice(-3)}`;
 }
 
-export function getAmountToPay(p: CustomerParcel): number | null {
-  if (p.parcelAmount != null && !Number.isNaN(p.parcelAmount)) return p.parcelAmount;
-  const total =
-    (Number(p.inboundCost) || 0) +
-    (Number(p.deliveryCost) || 0) +
-    (Number(p.storageCost) || 0) +
-    (Number(p.pickUpCost) || 0);
-  return total > 0 ? total : null;
+const pos = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+
+/** What the customer still owes, line by line. POD parcels include the item value collected for the sender. */
+export function chargeLines(p: CustomerParcel): ChargeLine[] {
+  const lines: ChargeLine[] = [
+    { label: "Inbound fee", amount: p.inboudPayed ? 0 : pos(p.inboundCost) },
+    { label: "Storage", amount: pos(p.storageCost) },
+    { label: "Delivery fee", amount: p.homeDelivery ? pos(p.deliveryCost) : 0 },
+    { label: "Pickup fee", amount: pos(p.pickUpCost) },
+    { label: "Item value (pay on delivery)", amount: p.pod ? pos(p.itemCost) : 0 },
+  ];
+  return lines.filter(l => l.amount > 0);
 }
 
-function getDisplayStatus(p: CustomerParcel): { status: ParcelDisplayStatus; label: string } {
-  if (p.delivered) return { status: "delivered", label: "Delivered" };
-  if (p.homeDelivery && p.parcelAssigned) return { status: "out_for_delivery", label: "Out for delivery" };
-  if (p.shelfName) return { status: "ready", label: "Ready for pickup" };
-  return { status: "in_progress", label: "In progress" };
+export function getAmountToPay(p: CustomerParcel): number | null {
+  if (p.delivered || p.pickedUp) return 0;
+  const total = chargeLines(p).reduce((s, l) => s + l.amount, 0);
+  if (total > 0) return Math.round(total * 100) / 100;
+  if (p.parcelAmount != null && !Number.isNaN(p.parcelAmount) && p.parcelAmount > 0) return p.parcelAmount;
+  return null;
+}
+
+const isAtStation = (p: CustomerParcel) => !!p.hasArrivedAtOffice || !!p.shelfName;
+const isWithRider = (p: CustomerParcel) => !p.delivered && !p.pickedUp && (!!p.parcelAssigned || !!p.riderInfo);
+
+function getDisplayStatus(p: CustomerParcel): { status: ParcelDisplayStatus; label: string; hint: string } {
+  if (p.delivered) return { status: "delivered", label: "Delivered", hint: "This parcel has been delivered." };
+  if (p.pickedUp) return { status: "collected", label: "Collected", hint: "This parcel was collected at the station." };
+  if (isWithRider(p)) return { status: "out_for_delivery", label: "Out for delivery", hint: "A rider has your parcel and is bringing it to you." };
+  if (isAtStation(p))
+    return {
+      status: "ready",
+      label: "Ready at the station",
+      hint: p.homeDelivery ? "Delivery is booked. The station will assign a rider soon." : "Collect it at the station, or request delivery to your door.",
+    };
+  return { status: "in_progress", label: "On the way to the station", hint: "We'll text you when it arrives. You can book delivery now." };
 }
 
 function buildTimeline(p: CustomerParcel): ParcelTimelineEvent[] {
   const created = p.createdAt ?? null;
-  const updated = p.updatedAt ?? null;
+  const done = !!p.delivered || !!p.pickedUp;
   const events: ParcelTimelineEvent[] = [
-    { id: "registered", label: "Parcel registered", timestamp: created, completed: created != null },
-    { id: "transit", label: "In transit to branch", timestamp: created, completed: !!p.shelfName || !!p.delivered },
-    { id: "arrived", label: "Arrived at branch", timestamp: p.shelfName ? updated ?? created : null, completed: !!p.shelfName },
-    { id: "notified", label: "Customer notified", timestamp: p.shelfName ? updated : null, completed: !!p.shelfName && !p.delivered },
-    { id: "delivered", label: "Delivered", timestamp: p.delivered ? updated : null, completed: !!p.delivered },
+    { id: "registered", label: "Registered by the sender", timestamp: created, completed: created != null },
+    { id: "arrived", label: "Arrived at the station", timestamp: null, completed: isAtStation(p) || done || isWithRider(p) },
   ];
-  return events.filter(e => e.completed || e.timestamp != null);
+  if (p.homeDelivery || isWithRider(p) || p.delivered) {
+    events.push({ id: "rider", label: p.riderInfo?.riderName ? `With rider ${p.riderInfo.riderName}` : "With a rider", timestamp: null, completed: isWithRider(p) || !!p.delivered });
+    events.push({ id: "delivered", label: "Delivered", timestamp: p.delivered ? p.updatedAt ?? null : null, completed: !!p.delivered });
+  } else {
+    events.push({ id: "collected", label: "Collected at the station", timestamp: p.pickedUp ? p.updatedAt ?? null : null, completed: !!p.pickedUp });
+  }
+  return events;
 }
 
 export const STATUS_STYLES: Record<ParcelDisplayStatus, string> = {
@@ -98,6 +126,7 @@ export const STATUS_STYLES: Record<ParcelDisplayStatus, string> = {
   in_progress: "bg-amber-50 text-amber-800 border-amber-200",
   delivered: "bg-slate-100 text-slate-600 border-slate-200",
   out_for_delivery: "bg-sky-50 text-sky-700 border-sky-200",
+  collected: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 export function getParcelTitle(p: Pick<EnrichedParcel, "parcelDescription" | "receiverName" | "parcelId">): string {
@@ -138,6 +167,7 @@ const STATUS_SORT_ORDER: Record<ParcelDisplayStatus, number> = {
   out_for_delivery: 1,
   in_progress: 2,
   delivered: 3,
+  collected: 3,
 };
 
 export function sortParcelsForReceive(parcels: EnrichedParcel[]): EnrichedParcel[] {
@@ -203,26 +233,14 @@ export type DeliverySuccessInfo = {
 } | null;
 
 export function enrichParcel(p: CustomerParcel, officeNames: Record<string, string> = {}): EnrichedParcel {
-  const { status, label } = getDisplayStatus(p);
-  const arrivedAt = p.shelfName ? (p.updatedAt ?? p.createdAt ?? null) : null;
-  const storageDays =
-    arrivedAt != null
-      ? Math.max(0, Math.floor((Date.now() - (arrivedAt < 1e12 ? arrivedAt * 1000 : arrivedAt)) / 86400000))
-      : 0;
-
+  const { status, label, hint } = getDisplayStatus(p);
   return {
     ...p,
     displayStatus: status,
     statusLabel: label,
-    branchName:
-      (p.officeId && officeNames[p.officeId]) ||
-      (p as CustomerParcel & { officeName?: string }).officeName ||
-      (p.officeId ? `Branch ${p.officeId.slice(-4).toUpperCase()}` : "Pickup branch"),
-    pickupCode: p.parcelId.replace(/\D/g, "").slice(-4).padStart(4, "0"),
-    arrivedAt,
-    storageDays,
-    freeStorageDays: 3,
+    statusHint: hint,
+    branchName: p.office?.name || p.officeName || (p.officeId && officeNames[p.officeId]) || "",
+    arrivedAt: null,
     timeline: buildTimeline(p),
   };
 }
-

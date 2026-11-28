@@ -24,7 +24,7 @@ import { useLocation as useLocations } from "../../contexts/LocationContext";
 import { RoutePlanPanel, toAssignmentPlan } from "../../components/RoutePlanPanel";
 import type { RoutePlan } from "../../utils/routePlan";
 import { Label } from "@radix-ui/react-label";
-import { activeHolders, isAlreadyOut, splitFreeAndTaken, uniqueByParcel, type ActiveHolder } from "../../utils/assignmentGuard";
+import { activeHolders, isAlreadyOut, ridersHolding, splitFreeAndTaken, uniqueByParcel, type ActiveHolder } from "../../utils/assignmentGuard";
 
 interface ParcelCardProps {
     parcel: ParcelResponse;
@@ -58,7 +58,7 @@ const ParcelCard = ({ parcel, isSelected, onToggle, onRemove, filterMode }: Parc
                 <div className="flex flex-col gap-4">
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                            {filterMode === 'ready' && <button
+                            <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onToggle();
@@ -69,7 +69,7 @@ const ParcelCard = ({ parcel, isSelected, onToggle, onRemove, filterMode }: Parc
                                     }`}
                             >
                                 {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
-                            </button>}
+                            </button>
                             <div className="flex flex-col">
                                 <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
                                     {parcel.receiverName || "N/A"}
@@ -280,8 +280,6 @@ export const ParcelSelection = (): JSX.Element => {
     }, [allParcels, filterMode, holders]);
 
     const toggleParcel = (parcelId: string) => {
-        // Parcels a rider already has can't be picked again; move them via Active Deliveries.
-        if (filterMode === 'assigned') return;
         const newSelected = new Set(selectedParcels);
         if (newSelected.has(parcelId)) {
             newSelected.delete(parcelId);
@@ -296,7 +294,6 @@ export const ParcelSelection = (): JSX.Element => {
     };
 
     const handleAssign = () => {
-        if (filterMode === 'assigned') return;
         if (selectedParcels.size > 0) {
             setRiderStep("rider");
             setRoutePlan(null);
@@ -305,17 +302,8 @@ export const ParcelSelection = (): JSX.Element => {
         }
     };
 
-    // Get unique rider IDs from selected parcels that already have assignments
-    const getAssignedRiderIds = (): Set<string> => {
-        const assignedRiderIds = new Set<string>();
-        selectedParcels.forEach(parcelId => {
-            const parcel = filteredParcels.find(p => p.parcelId === parcelId);
-            if (parcel?.riderInfo?.riderId) {
-                assignedRiderIds.add(parcel.riderInfo.riderId);
-            }
-        });
-        return assignedRiderIds;
-    };
+    // Riders who already have any of the selected parcels: they can't be picked for them again.
+    const getAssignedRiderIds = (): Set<string> => ridersHolding(selectedParcels, allParcels, holders);
 
     const fetchRiders = async () => {
         setLoadingRiders(true);
@@ -354,13 +342,17 @@ export const ParcelSelection = (): JSX.Element => {
                 showToast("Couldn't check the parcels with the server. Please try again.", "error");
                 return;
             }
-            const { free, taken, gone } = splitFreeAndTaken(wanted, fresh.parcels, fresh.held);
-            if (taken.length || gone.length) {
+            const { free, taken, sameRider, gone } = splitFreeAndTaken(wanted, fresh.parcels, fresh.held, {
+                riderId: selectedRider,
+                reassign: filterMode === 'assigned',
+            });
+            if (taken.length || sameRider.length || gone.length) {
                 applyFresh(fresh.parcels, fresh.held);
                 resetRiderModal();
                 const who = taken.map((t) => `${t.parcelId}${t.riderName ? ` (${t.riderName})` : ""}`).join(", ");
                 showToast(
-                    [taken.length ? `Already with a rider: ${who}.` : "", gone.length ? `No longer waiting for delivery: ${gone.join(", ")}.` : "", "Nothing was assigned. Check the list and try again."]
+                    [sameRider.length ? `${selectedRiderData?.name ?? "This rider"} already has: ${sameRider.join(", ")}.` : "",
+                        taken.length ? `Already with a rider: ${who}.` : "", gone.length ? `No longer waiting for delivery: ${gone.join(", ")}.` : "", "Nothing was assigned. Check the list and try again."]
                         .filter(Boolean).join(" "),
                     "warning"
                 );
@@ -486,8 +478,7 @@ export const ParcelSelection = (): JSX.Element => {
 
                             <Button
                                 onClick={handleAssign}
-                                disabled={selectedParcels.size === 0 || filterMode === 'assigned'}
-                                title={filterMode === 'assigned' ? "These parcels are already with a rider. To give one to another rider, return it from Active Deliveries first." : undefined}
+                                disabled={selectedParcels.size === 0}
                                 className="w-full sm:w-auto bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Continue to Rider Selection ({selectedParcels.size})

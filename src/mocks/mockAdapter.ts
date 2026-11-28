@@ -10,6 +10,7 @@ import {
 } from "./mockData";
 import API_BASE_URL from "../config/api";
 import { registerDriverPayments, driverCashOn } from "./driverPaymentsMock";
+import { registerCustomer } from "./customerMock";
 import { analyzeOffTask, checkDeliveries, normalizePoints, summarize, type DeliveryStop } from "../screens/RiderMap/trackUtils";
 
 /** Builds a DeliveryCheckResponse (updated backend) from the sample track and assignments. */
@@ -253,6 +254,7 @@ on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
     return COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
 });
 registerDriverPayments(on, { driverAssignments: DRIVER_ASSIGNMENTS, findParcel, officeId: HOME_OFFICE.id, page });
+registerCustomer(on, { parcels: PARCELS, offices: OFFICES, serialize: serializeParcel });
 
 // Everything through the drawer for a day: counter takings in, driver cash payouts and advances out.
 const cashMovements = (day: string) => {

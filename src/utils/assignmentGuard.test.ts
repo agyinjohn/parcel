@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activeHolders, isAlreadyOut, splitFreeAndTaken, uniqueByParcel } from "./assignmentGuard";
+import { activeHolders, isAlreadyOut, ridersHolding, splitFreeAndTaken, uniqueByParcel } from "./assignmentGuard";
 
 const asg = (id: string, status: string, rider: string, at: number, parcels: any[]) => ({ assignmentId: id, status, assignedAt: at, riderInfo: { riderId: rider, riderName: rider.toUpperCase() }, parcels });
 
@@ -17,14 +17,23 @@ describe("activeHolders", () => {
 });
 
 describe("splitFreeAndTaken", () => {
-    it("keeps only parcels nobody has, and reports the rest", () => {
-        const holders = activeHolders([asg("a1", "ASSIGNED", "r1", 1, [{ parcelId: "P1" }])]);
-        const fresh = [{ parcelId: "P1" }, { parcelId: "P2" }, { parcelId: "P3", parcelAssigned: true }];
-        expect(splitFreeAndTaken(["P1", "P2", "P2", "P3", "P4"], fresh, holders)).toEqual({
+    const holders = activeHolders([asg("a1", "ASSIGNED", "r1", 1, [{ parcelId: "P1" }])]);
+    const fresh = [{ parcelId: "P1" }, { parcelId: "P2" }, { parcelId: "P3", parcelAssigned: true, riderInfo: { riderId: "r2", riderName: "R2" } }];
+
+    it("from the Ready tab, keeps only parcels nobody has", () => {
+        expect(splitFreeAndTaken(["P1", "P2", "P2", "P3", "P4"], fresh, holders, { riderId: "r9" })).toEqual({
             free: ["P2"],
-            taken: [{ parcelId: "P1", riderName: "R1" }, { parcelId: "P3", riderName: undefined }],
+            taken: [{ parcelId: "P1", riderName: "R1" }, { parcelId: "P3", riderName: "R2" }],
+            sameRider: [],
             gone: ["P4"],
         });
+    });
+    it("never gives a rider a parcel they already have, even when reassigning", () => {
+        expect(splitFreeAndTaken(["P1", "P3"], fresh, holders, { riderId: "r1", reassign: true })).toMatchObject({ free: ["P3"], sameRider: ["P1"] });
+        expect(splitFreeAndTaken(["P3"], fresh, holders, { riderId: "r2", reassign: true })).toMatchObject({ free: [], sameRider: ["P3"] });
+    });
+    it("lists the riders already holding the picked parcels", () => {
+        expect([...ridersHolding(["P1", "P3"], fresh, holders)].sort()).toEqual(["r1", "r2"]);
     });
 });
 

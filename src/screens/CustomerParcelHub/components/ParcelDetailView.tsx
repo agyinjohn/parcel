@@ -1,311 +1,219 @@
 import { useState } from "react";
 import {
-  Building2,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  MapPin,
-  Package,
-  Phone,
-  Share2,
-  Truck,
-  UserRound,
+  Building2, Check, CheckCircle2, Clock, Copy, MapPin, Navigation, Package, Phone, Share2, Truck, UserRound, Wallet,
 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { ParcelThumbnail } from "./ParcelThumbnail";
 import {
-  EnrichedParcel,
-  STATUS_STYLES,
-  formatTrackCurrency,
-  formatTrackDateTime,
-  getAmountToPay,
-  getParcelTitle,
-  isParcelArrived,
+  EnrichedParcel, STATUS_STYLES, chargeLines, formatTrackCurrency, formatTrackDateTime, getAmountToPay, getParcelTitle, isParcelArrived,
 } from "../trackParcelUtils";
 import type { DeliverySuccessInfo } from "../trackParcelUtils";
 
-export type ParcelActionSuccess = "pickup" | "delivery" | null;
+export type ParcelActionSuccess = "delivery" | null;
 
 interface Props {
   parcel: EnrichedParcel;
   actionSuccess: ParcelActionSuccess;
   deliverySuccess: DeliverySuccessInfo;
   onRequestDelivery: () => void;
-  onSelfPickup: () => void;
 }
 
-export const ParcelDetailView = ({
-  parcel,
-  actionSuccess,
-  deliverySuccess,
-  onRequestDelivery,
-  onSelfPickup,
-}: Props) => {
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+const TYPE_LABEL: Record<string, string> = { PARCEL: "Parcel", ONLINE: "Online order", PICKUP: "Pickup request", TRANSFER: "Transfer" };
+
+/** Google Maps embed (no API key needed) for a point or a place name. */
+const embedUrl = (q: string) => `https://maps.google.com/maps?q=${encodeURIComponent(q)}&z=15&output=embed`;
+const directionsUrl = (q: string) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`;
+
+const MapBox = ({ query, title }: { query: string; title: string }) => (
+  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+    <iframe title={title} src={embedUrl(query)} className="block h-48 w-full" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+  </div>
+);
+
+const Row = ({ label, value }: { label: string; value?: React.ReactNode }) =>
+  value === undefined || value === null || value === "" ? null : (
+    <div className="flex items-start justify-between gap-4 py-2 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium text-neutral-800">{value}</span>
+    </div>
+  );
+
+const Section = ({ icon: Icon, title, children }: { icon: React.ComponentType<{ className?: string }>; title: string; children: React.ReactNode }) => (
+  <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <CardContent className="space-y-3 p-4">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-800"><Icon className="h-4 w-4 text-[#ea690c]" />{title}</h2>
+      {children}
+    </CardContent>
+  </Card>
+);
+
+export const ParcelDetailView = ({ parcel, actionSuccess, deliverySuccess, onRequestDelivery }: Props) => {
   const [copied, setCopied] = useState(false);
   const amount = getAmountToPay(parcel);
+  const lines = chargeLines(parcel);
   const title = getParcelTitle(parcel);
-  const canRequestDelivery =
-    !actionSuccess &&
-    (parcel.displayStatus === "ready" || parcel.displayStatus === "in_progress");
-  const canSelfPickup = !actionSuccess && parcel.displayStatus === "ready";
-  const scheduleDelivery = !isParcelArrived(parcel);
+  const office = parcel.office;
+  const finished = parcel.displayStatus === "delivered" || parcel.displayStatus === "collected";
+  const withRider = parcel.displayStatus === "out_for_delivery";
+
+  const stationQuery = office?.latitude != null && office?.longitude != null
+    ? `${office.latitude},${office.longitude}`
+    : [office?.name ?? parcel.branchName, office?.address].filter(Boolean).join(", ");
+  const hasDeliveryPin = parcel.receiverLatitude != null && parcel.receiverLongitude != null;
+  const deliveryQuery = hasDeliveryPin ? `${parcel.receiverLatitude},${parcel.receiverLongitude}` : "";
+  const deliveryPlace = [parcel.receiverLocationName, parcel.receiverAddress || parcel.deliveryAddress].filter(Boolean).join(" · ");
+
+  const canRequestDelivery = !actionSuccess && !finished && !withRider && !parcel.homeDelivery;
 
   const copyId = async () => {
-    try {
-      await navigator.clipboard.writeText(parcel.parcelId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
-    }
+    try { await navigator.clipboard.writeText(parcel.parcelId); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* ignore */ }
   };
-
-  const shareTracking = async () => {
-    const text = `My M&M parcel: ${parcel.parcelId}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Parcel tracking", text });
-      } catch {
-        /* ignore */
-      }
-    } else {
-      copyId();
-    }
+  const share = async () => {
+    const text = `Parcel ${parcel.parcelId}: ${parcel.statusLabel}`;
+    if (navigator.share) { try { await navigator.share({ title: "Parcel tracking", text, url: window.location.href }); } catch { /* ignore */ } }
+    else copyId();
   };
-
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parcel.branchName)}`;
 
   return (
     <div className="space-y-4 pb-28 animate-in fade-in duration-300">
-      {actionSuccess === "pickup" && (
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 flex gap-3">
-          <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-          <div>
-            <p className="font-semibold text-emerald-900">Branch notified — you&apos;re on your way</p>
-            <p className="text-sm text-emerald-800 mt-1">
-              Est. wait 10–15 min · Pickup code <span className="font-bold">{parcel.pickupCode}</span> · {parcel.branchName}
-            </p>
-          </div>
-        </div>
-      )}
-
       {actionSuccess === "delivery" && deliverySuccess && (
-        <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4 flex gap-3">
-          <CheckCircle2 className="w-6 h-6 text-blue-600 shrink-0" />
-          <div>
-            <p className="font-semibold text-blue-900">
-              {deliverySuccess.scheduled ? "Scheduled delivery booked" : "Delivery paid & requested"}
-            </p>
-            <p className="text-sm text-blue-800 mt-1">
-              {deliverySuccess.parcelCount} parcel{deliverySuccess.parcelCount !== 1 ? "s" : ""} in one trip · paid via
-              Paystack
-              {deliverySuccess.scheduled && deliverySuccess.scheduledAt && (
-                <> · {deliverySuccess.scheduledAt}</>
-              )}
-              {deliverySuccess.paystackReference && (
-                <> · ref <span className="font-mono text-xs">{deliverySuccess.paystackReference}</span></>
-              )}
-              {" "}· ETA 15–20 min after rider assignment
+        <div className="flex gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <CheckCircle2 className="h-6 w-6 shrink-0 text-blue-600" />
+          <div className="text-sm text-blue-800">
+            <p className="font-semibold text-blue-900">{deliverySuccess.scheduled ? "Delivery booked" : "Delivery requested"}</p>
+            <p className="mt-1">
+              The station has your request{deliverySuccess.scheduledAt ? ` for ${deliverySuccess.scheduledAt}` : ""} and will assign a rider. We'll text you when the rider is on the way.
+              {deliverySuccess.paystackReference && <> Payment ref <span className="font-mono text-xs">{deliverySuccess.paystackReference}</span>.</>}
             </p>
           </div>
         </div>
       )}
 
-      {actionSuccess === "delivery" && !deliverySuccess && (
-        <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4 flex gap-3">
-          <CheckCircle2 className="w-6 h-6 text-blue-600 shrink-0" />
-          <div>
-            <p className="font-semibold text-blue-900">Delivery requested</p>
-            <p className="text-sm text-blue-800 mt-1">
-              A rider will be assigned shortly · ETA 15–20 min after assignment
-            </p>
-          </div>
-        </div>
-      )}
-
-      <Card className="border border-slate-200/90 bg-white shadow-sm rounded-2xl overflow-hidden">
+      {/* Status */}
+      <Card className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
         <ParcelThumbnail parcel={parcel} size="hero" className="rounded-none border-0 border-b border-slate-100" />
-        <CardContent className="p-5 space-y-4">
+        <CardContent className="space-y-4 p-5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-bold text-neutral-900 leading-snug">{title}</h1>
-              <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_STYLES[parcel.displayStatus]}`}
-              >
-                {parcel.statusLabel}
-              </span>
+              <h1 className="text-lg font-bold leading-snug text-neutral-900">{title}</h1>
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[parcel.displayStatus]}`}>{parcel.statusLabel}</span>
             </div>
-            <button
-              type="button"
-              onClick={copyId}
-              className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-mono text-slate-500 hover:text-[#ea690c]"
-            >
-              {parcel.parcelId}
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
+            <div className="mt-1.5 flex items-center gap-3">
+              <button type="button" onClick={copyId} className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-500 hover:text-[#ea690c]">
+                {parcel.parcelId}{copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+              <button type="button" onClick={share} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[#ea690c]"><Share2 className="h-3.5 w-3.5" />Share</button>
+            </div>
+            <p className="mt-3 text-sm text-slate-600">{parcel.statusHint}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { icon: Building2, label: "Branch", value: parcel.branchName },
-              { icon: Package, label: "Shelf", value: parcel.shelfName || "—" },
-              { icon: MapPin, label: "Code", value: parcel.pickupCode },
-            ].map(item => (
-              <div key={item.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3 text-center">
-                <item.icon className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                <p className="text-[10px] uppercase tracking-wide text-slate-400 font-medium">{item.label}</p>
-                <p className="text-xs font-semibold text-neutral-800 mt-0.5 truncate">{item.value}</p>
-              </div>
+          {/* Journey */}
+          <ol className="relative ml-1 space-y-3 border-l border-slate-200 pl-5">
+            {parcel.timeline.map((e) => (
+              <li key={e.id} className="relative">
+                <span className={`absolute -left-[26px] top-0.5 flex h-3 w-3 items-center justify-center rounded-full ring-4 ring-white ${e.completed ? "bg-[#ea690c]" : "bg-slate-300"}`} />
+                <p className={`text-sm ${e.completed ? "font-medium text-neutral-800" : "text-slate-400"}`}>{e.label}</p>
+                {e.timestamp != null && <p className="text-xs text-slate-400">{formatTrackDateTime(e.timestamp)}</p>}
+              </li>
             ))}
-          </div>
-
-          <div className="rounded-xl bg-orange-50 border border-orange-100 px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-orange-700/80 font-medium">Amount to pay</p>
-              <p className="text-xl font-bold text-[#ea690c] mt-0.5">
-                {amount != null ? formatTrackCurrency(amount) : "Contact branch"}
-              </p>
-            </div>
-            {parcel.pod && (
-              <span className="text-[11px] font-semibold bg-white text-orange-700 px-2 py-1 rounded-full border border-orange-200">
-                POD
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-around border-t border-slate-100 pt-3">
-            <a
-              href="tel:+233504040226"
-              className="flex flex-col items-center gap-1 text-xs text-slate-600 hover:text-[#ea690c]"
-            >
-              <Phone className="w-4 h-4" />
-              Call branch
-            </a>
-            <button
-              type="button"
-              onClick={shareTracking}
-              className="flex flex-col items-center gap-1 text-xs text-slate-600 hover:text-[#ea690c]"
-            >
-              <Share2 className="w-4 h-4" />
-              Share ID
-            </button>
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center gap-1 text-xs text-slate-600 hover:text-[#ea690c]"
-            >
-              <MapPin className="w-4 h-4" />
-              Directions
-            </a>
-          </div>
+          </ol>
         </CardContent>
       </Card>
 
-      <Card className="border border-slate-200 rounded-2xl">
-        <button
-          type="button"
-          onClick={() => setDetailsOpen(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left"
-        >
-          <span className="text-sm font-semibold text-neutral-800">More details</span>
-          {detailsOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-        </button>
-        {detailsOpen && (
-          <CardContent className="px-4 pb-4 pt-0 space-y-3 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-slate-100 px-3 py-2.5">
-                <p className="text-xs text-slate-500">Arrived</p>
-                <p className="font-medium text-neutral-800 mt-0.5">{formatTrackDateTime(parcel.arrivedAt)}</p>
-              </div>
-              <div className="rounded-xl border border-slate-100 px-3 py-2.5">
-                <p className="text-xs text-slate-500">Storage</p>
-                <p className="font-medium text-neutral-800 mt-0.5">
-                  {parcel.storageDays} day{parcel.storageDays !== 1 ? "s" : ""}{" "}
-                  <span className="text-slate-400 font-normal">({parcel.freeStorageDays} free)</span>
-                </p>
-              </div>
+      {/* Where it is now */}
+      {withRider ? (
+        <Section icon={Truck} title="With your rider">
+          <Row label="Rider" value={parcel.riderInfo?.riderName || "Assigned"} />
+          {parcel.riderInfo?.riderPhoneNumber && (
+            <a href={`tel:${parcel.riderInfo.riderPhoneNumber}`} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-neutral-800 hover:border-[#ea690c] hover:text-[#ea690c]">
+              <Phone className="h-4 w-4" />Call the rider
+            </a>
+          )}
+          {hasDeliveryPin && <MapBox query={deliveryQuery} title="Delivery location" />}
+          {deliveryPlace && <p className="text-sm text-slate-600"><MapPin className="mr-1 inline h-3.5 w-3.5 text-slate-400" />Delivering to {deliveryPlace}</p>}
+        </Section>
+      ) : !finished ? (
+        <Section icon={Building2} title={parcel.displayStatus === "ready" ? "Where your parcel is" : "Where it's going"}>
+          <div>
+            <p className="font-semibold text-neutral-900">{parcel.branchName || "Station"}</p>
+            {office?.address && <p className="text-sm text-slate-600">{office.address}</p>}
+          </div>
+          <div className="divide-y divide-slate-100">
+            {parcel.displayStatus === "ready" && <Row label="Shelf" value={parcel.shelfName} />}
+            <Row label="Opening hours" value={office?.openingHours} />
+          </div>
+          {stationQuery && <MapBox query={stationQuery} title="Station location" />}
+          <div className="grid grid-cols-2 gap-2">
+            {office?.phoneNumber ? (
+              <a href={`tel:${office.phoneNumber}`} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-neutral-800 hover:border-[#ea690c] hover:text-[#ea690c]"><Phone className="h-4 w-4" />Call station</a>
+            ) : <span />}
+            {stationQuery && (
+              <a href={directionsUrl(stationQuery)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-neutral-800 hover:border-[#ea690c] hover:text-[#ea690c]"><Navigation className="h-4 w-4" />Directions</a>
+            )}
+          </div>
+          {!stationQuery && <p className="text-xs text-slate-400">The station's address isn't available yet.</p>}
+        </Section>
+      ) : null}
+
+      {/* Delivery location (when booked, not yet with a rider) */}
+      {!withRider && (parcel.homeDelivery || hasDeliveryPin) && (
+        <Section icon={MapPin} title={parcel.delivered ? "Delivered to" : "Delivery address"}>
+          {deliveryPlace ? <p className="text-sm text-neutral-800">{deliveryPlace}</p> : <p className="text-sm text-slate-500">No address given yet.</p>}
+          {hasDeliveryPin && <MapBox query={deliveryQuery} title="Delivery location" />}
+        </Section>
+      )}
+
+      {/* Payment */}
+      <Section icon={Wallet} title={finished ? "Payment" : "To pay"}>
+        {finished ? (
+          <p className="text-sm text-slate-600">Nothing left to pay.</p>
+        ) : (
+          <>
+            <div className="divide-y divide-slate-100">
+              {lines.map((l) => <Row key={l.label} label={l.label} value={formatTrackCurrency(l.amount)} />)}
             </div>
-            {(parcel.receiverName || parcel.receiverAddress) && (
-              <div className="rounded-xl border border-slate-100 px-3 py-2.5">
-                <p className="text-xs text-slate-500">Receiver</p>
-                {parcel.receiverName && <p className="font-medium text-neutral-800 mt-0.5">{parcel.receiverName}</p>}
-                {parcel.receiverAddress && <p className="text-slate-600 text-xs mt-0.5">{parcel.receiverAddress}</p>}
-              </div>
-            )}
-          </CardContent>
+            <div className="flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
+              <span className="text-sm font-medium text-orange-800">Total</span>
+              <span className="text-xl font-bold text-[#ea690c]">{amount != null ? formatTrackCurrency(amount) : "Ask the station"}</span>
+            </div>
+            <p className="text-xs text-slate-500">
+              {parcel.homeDelivery ? "Pay the rider when your parcel arrives." : "Pay at the station when you collect, or online when you book delivery."}
+            </p>
+          </>
         )}
-      </Card>
+      </Section>
 
-      <Card className="border border-slate-200 rounded-2xl">
-        <button
-          type="button"
-          onClick={() => setTimelineOpen(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left"
-        >
-          <span className="text-sm font-semibold text-neutral-800">Parcel journey</span>
-          {timelineOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-        </button>
-        {timelineOpen && (
-          <CardContent className="px-4 pb-4 pt-0">
-            <ol className="space-y-0">
-              {parcel.timeline.map((event, index) => {
-                const isLast = index === parcel.timeline.length - 1;
-                return (
-                  <li key={event.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-2.5 h-2.5 rounded-full mt-1.5 ${
-                          event.completed ? "bg-[#ea690c]" : "bg-slate-300"
-                        }`}
-                      />
-                      {!isLast && <div className="w-px flex-1 bg-slate-200 my-1 min-h-[24px]" />}
-                    </div>
-                    <div className="pb-4 min-w-0">
-                      <p className={`text-sm ${event.completed ? "text-neutral-800 font-medium" : "text-slate-400"}`}>
-                        {event.label}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">{formatTrackDateTime(event.timestamp)}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </CardContent>
-        )}
-      </Card>
+      {/* Parcel details */}
+      <Section icon={Package} title="Parcel details">
+        <div className="divide-y divide-slate-100">
+          <Row label="Description" value={parcel.parcelDescription} />
+          <Row label="Type" value={parcel.typeofParcel ? TYPE_LABEL[parcel.typeofParcel] ?? parcel.typeofParcel : undefined} />
+          <Row label="Items" value={(parcel.numberOfItems || parcel.itemQuantity) || undefined} />
+          <Row label="Weight" value={parcel.parcelWeight ? `${parcel.parcelWeight} kg` : undefined} />
+          <Row label="Handling" value={parcel.fragile ? "Fragile" : undefined} />
+          <Row label="Pay on delivery" value={parcel.pod ? "Yes" : undefined} />
+          <Row label="From" value={parcel.senderName || undefined} />
+          <Row label="For" value={parcel.receiverName || undefined} />
+          <Row label="Registered" value={parcel.createdAt ? formatTrackDateTime(parcel.createdAt) : undefined} />
+          <Row label="Last update" value={parcel.updatedAt ? formatTrackDateTime(parcel.updatedAt) : undefined} />
+        </div>
+      </Section>
 
-      {(canSelfPickup || canRequestDelivery) && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur border-t border-slate-200 px-4 py-3 safe-area-pb">
-          <div className="max-w-lg mx-auto flex gap-2">
-            {canSelfPickup && (
-              <Button
-                type="button"
-                onClick={onSelfPickup}
-                className="flex-1 h-11 rounded-xl bg-[#ea690c] hover:bg-[#d45e0a] text-white"
-              >
-                <UserRound className="w-4 h-4 mr-2" />
-                I&apos;m coming
-              </Button>
-            )}
-            {canRequestDelivery && (
-              <Button
-                type="button"
-                onClick={onRequestDelivery}
-                className={`h-11 rounded-xl text-white ${canSelfPickup ? "flex-1 bg-blue-600 hover:bg-blue-700" : "w-full bg-blue-600 hover:bg-blue-700"}`}
-              >
-                <Truck className="w-4 h-4 mr-2" />
-                {scheduleDelivery ? "Schedule delivery" : "Request delivery"}
-              </Button>
-            )}
+      {canRequestDelivery && (
+        <div className="safe-area-pb fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto flex max-w-lg gap-2">
+            <Button type="button" onClick={onRequestDelivery} className="h-11 w-full rounded-xl bg-[#ea690c] text-white hover:bg-[#d45e0a]">
+              <Truck className="mr-2 h-4 w-4" />
+              {isParcelArrived(parcel) ? "Deliver it to me" : "Book delivery for when it arrives"}
+            </Button>
           </div>
         </div>
       )}
+      {!canRequestDelivery && parcel.homeDelivery && !finished && !withRider && (
+        <p className="flex items-center justify-center gap-1.5 text-xs text-slate-500"><Clock className="h-3.5 w-3.5" />Delivery is booked for this parcel.</p>
+      )}
+      <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400"><UserRound className="h-3 w-3" />Only show this page to people you trust with your parcel.</p>
     </div>
   );
 };

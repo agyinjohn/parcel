@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { CalendarClock, Loader2, MapPin, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, CalendarClock, Loader2, MapPin, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
@@ -10,44 +10,42 @@ import {
   openPaystackPayment,
   paystackEmailFromPhone,
 } from "../../../services/paystackService";
+import { getDeliveryQuote, submitDeliveryRequest, type DeliveryQuote } from "../../../services/customerService";
 import { useToast } from "../../../components/ui/toast";
 import type { DeliverySchedule, EnrichedParcel, GpsCoordinates } from "../trackParcelUtils";
 import {
-  estimateDeliveryFee,
   formatTrackCurrency,
   isParcelArrived,
   requiresScheduledDelivery,
-  sumParcelAmounts,
   todayDateInput,
 } from "../trackParcelUtils";
 
 interface Props {
   parcels: EnrichedParcel[];
+  /** +233 form. */
   customerPhone: string;
   customerEmail?: string;
+  /** From the SMS link or a verified code; the backend needs it to accept the request. */
+  token?: string;
   onClose: () => void;
-  onSubmit: (
-    coords: GpsCoordinates,
-    notes: string,
-    paystackReference: string,
-    schedule: DeliverySchedule | null,
-  ) => void;
+  onSubmit: (info: { requestId: string; paystackReference: string; schedule: DeliverySchedule | null }) => void;
 }
 
-export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, onClose, onSubmit }: Props) => {
+export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, token, onClose, onSubmit }: Props) => {
   const { showToast } = useToast();
   const [coords, setCoords] = useState<GpsCoordinates | null>(null);
   const [notes, setNotes] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState("");
+  // Paid, but the backend didn't take the request: keep the reference on screen for the station.
+  const [paidNotRecorded, setPaidNotRecorded] = useState<{ reference: string; message: string } | null>(null);
 
   const isScheduled = requiresScheduledDelivery(parcels);
   const pendingCount = parcels.filter(p => !isParcelArrived(p)).length;
-
-  const deliveryFee = estimateDeliveryFee(parcels.length);
-  const parcelTotal = sumParcelAmounts(parcels);
-  const grandTotal = deliveryFee + parcelTotal;
 
   const parcelLabels = useMemo(
     () =>
@@ -69,8 +67,37 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
 
   const hasValidSchedule = !isScheduled || (scheduleDate && scheduleTime);
 
+  // The price depends on where we deliver: ask the server whenever the pin moves.
+  useEffect(() => {
+    if (!hasValidCoords || !coords) {
+      setQuote(null);
+      return;
+    }
+    let cancelled = false;
+    setQuoteLoading(true);
+    setQuoteError("");
+    const t = setTimeout(async () => {
+      const r = await getDeliveryQuote({
+        token,
+        phoneNumber: customerPhone,
+        parcelIds: parcels.map(p => p.parcelId),
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      });
+      if (cancelled) return;
+      setQuoteLoading(false);
+      if (r.success) setQuote(r.data);
+      else {
+        setQuote(null);
+        setQuoteError(r.status === 404 ? "Online delivery booking isn't available yet. Please call the station to book." : r.message);
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords?.latitude, coords?.longitude]);
+
   const handlePay = async () => {
-    if (!hasValidCoords || !coords || !hasValidSchedule) return;
+    if (!hasValidCoords || !coords || !hasValidSchedule || !quote || submitting) return;
 
     const schedule: DeliverySchedule | null = isScheduled
       ? { date: scheduleDate, time: scheduleTime }
@@ -78,26 +105,41 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
 
     setSubmitting(true);
     const reference = buildPaystackReference();
+    const record = async (paidRef: string) => {
+      const r = await submitDeliveryRequest({
+        token,
+        phoneNumber: customerPhone,
+        parcelIds: parcels.map(p => p.parcelId),
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        address: coords.address,
+        notes: notes.trim() || undefined,
+        scheduledDate: schedule?.date,
+        scheduledTime: schedule?.time,
+        quoteId: quote.quoteId,
+        amountPaid: quote.total,
+        paystackReference: paidRef,
+      });
+      setSubmitting(false);
+      if (r.success) onSubmit({ requestId: r.data.requestId, paystackReference: paidRef, schedule });
+      else setPaidNotRecorded({ reference: paidRef, message: r.message });
+    };
 
     try {
       await openPaystackPayment({
         email: customerEmail?.trim() || paystackEmailFromPhone(customerPhone),
-        amountGhc: grandTotal,
+        amountGhc: quote.total,
         reference,
         metadata: {
           parcelIds: parcels.map(p => p.parcelId),
+          quoteId: quote.quoteId,
           deliveryType: isScheduled ? "scheduled" : "immediate",
           scheduledDate: schedule?.date,
           scheduledTime: schedule?.time,
           latitude: coords.latitude,
           longitude: coords.longitude,
-          address: coords.address,
-          notes: notes.trim() || undefined,
         },
-        onSuccess: paidRef => {
-          setSubmitting(false);
-          onSubmit(coords, notes.trim(), paidRef, schedule);
-        },
+        onSuccess: paidRef => { void record(paidRef); },
         onCancel: () => {
           setSubmitting(false);
           showToast("Payment cancelled.", "info");
@@ -123,7 +165,7 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
               <p className="text-xs text-slate-500 mt-0.5">
                 {isScheduled
                   ? "Delivery runs after parcel(s) arrive at the branch"
-                  : "Select location on map · pay with Paystack"}
+                  : "Drop a pin where we should deliver, then pay online"}
               </p>
             </div>
             <button
@@ -202,27 +244,12 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
               </div>
             )}
 
-            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">Delivery fee ({parcels.length} parcel{parcels.length !== 1 ? "s" : ""})</span>
-                <span className="font-medium text-neutral-800">{formatTrackCurrency(deliveryFee)}</span>
+            {paidNotRecorded && (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                <p className="font-semibold">Payment received, but the booking wasn't saved</p>
+                <p className="mt-1">{paidNotRecorded.message} Please call the station and give this payment reference: <span className="font-mono font-semibold">{paidNotRecorded.reference}</span>. Don't pay again.</p>
               </div>
-              {parcelTotal > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Parcel amount{parcels.length > 1 ? "s" : ""} (POD)</span>
-                  <span className="font-medium text-neutral-800">{formatTrackCurrency(parcelTotal)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                <span className="font-semibold text-neutral-800">Total via Paystack</span>
-                <span className="text-lg font-bold text-[#ea690c]">{formatTrackCurrency(grandTotal)}</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                {isScheduled
-                  ? "Rider assigned for your preferred slot once all parcels are at the branch."
-                  : "ETA 15–20 minutes after rider assignment."}
-              </p>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-neutral-800">Delivery location on Google Maps</Label>
@@ -242,6 +269,38 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
               />
             </div>
 
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2 text-sm">
+              {!hasValidCoords ? (
+                <p className="text-slate-500">Drop the pin where we should deliver to see the price.</p>
+              ) : quoteLoading ? (
+                <p className="flex items-center gap-2 text-slate-500"><Loader2 className="w-4 h-4 animate-spin" />Getting the price…</p>
+              ) : quoteError ? (
+                <p className="flex items-start gap-2 text-red-700"><AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />{quoteError}</p>
+              ) : quote ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Delivery fee</span>
+                    <span className="font-medium text-neutral-800">{formatTrackCurrency(quote.deliveryFee)}</span>
+                  </div>
+                  {quote.parcelCharges > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Parcel charges (storage, inbound, POD)</span>
+                      <span className="font-medium text-neutral-800">{formatTrackCurrency(quote.parcelCharges)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <span className="font-semibold text-neutral-800">Total to pay now</span>
+                    <span className="text-lg font-bold text-[#ea690c]">{formatTrackCurrency(quote.total)}</span>
+                  </div>
+                </>
+              ) : null}
+              <p className="text-xs text-slate-500">
+                {isScheduled
+                  ? "The station assigns a rider for your chosen time once all parcels have arrived."
+                  : "The station assigns a rider and we text you when they're on the way."}
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-1">
               <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11 rounded-xl">
                 Cancel
@@ -249,7 +308,7 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
               <Button
                 type="button"
                 onClick={handlePay}
-                disabled={!hasValidCoords || !hasValidSchedule || submitting}
+                disabled={!hasValidCoords || !hasValidSchedule || !quote || submitting || !!paidNotRecorded}
                 className="flex-1 h-11 rounded-xl bg-[#ea690c] hover:bg-[#d45e0a] text-white"
               >
                 {submitting ? (
@@ -257,7 +316,7 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, on
                 ) : (
                   <>
                     <MapPin className="w-4 h-4 mr-2" />
-                    {isScheduled ? "Schedule & pay" : "Pay with Paystack"}
+                    {quote ? `Pay ${formatTrackCurrency(quote.total)}` : "Pay with Paystack"}
                   </>
                 )}
               </Button>

@@ -60,6 +60,11 @@ export async function openPaystackPayment(params: {
   onSuccess: (reference: string) => void;
   onCancel?: () => void;
 }): Promise<void> {
+  // Sample-data mode: no real payment, pretend the customer paid.
+  if (import.meta.env.MODE === "mock") {
+    setTimeout(() => params.onSuccess(params.reference), 300);
+    return;
+  }
   const key = getPaystackPublicKey();
   if (!key) {
     throw new Error("Paystack is not configured. Add VITE_PAYSTACK_PUBLIC_KEY to your environment.");

@@ -4,7 +4,6 @@ import { MnmLogo } from "../../../components/MnmLogo";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { maskPhone } from "../trackParcelUtils";
-import { TRACK_OTP_BYPASS } from "../trackOtpMock";
 import { OtpDigitInput } from "./OtpDigitInput";
 
 interface Props {
@@ -46,7 +45,7 @@ export const OtpVerifyStep = ({
 
   const tryAutoVerify = useCallback(
     (code: string) => {
-      if (!TRACK_OTP_BYPASS && code.length === 6 && !loading) onVerify();
+      if (code.length === 6 && !loading) onVerify();
     },
     [loading, onVerify],
   );
@@ -84,16 +83,10 @@ export const OtpVerifyStep = ({
             </p>
           )}
 
-          {TRACK_OTP_BYPASS && import.meta.env.DEV && (
-            <p className="text-xs text-center text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              Dev mode: OTP check is off — tap continue with any or no code.
-            </p>
-          )}
-
           <Button
             type="button"
             onClick={onVerify}
-            disabled={loading || (!TRACK_OTP_BYPASS && otp.length !== 6)}
+            disabled={loading || otp.length !== 6}
             className="w-full bg-[#ea690c] hover:bg-[#d45e0a] text-white rounded-xl h-11 font-medium"
           >
             {loading ? (
