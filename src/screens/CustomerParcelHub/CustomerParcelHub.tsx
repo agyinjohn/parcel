@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/ui/toast";
 import { useCustomerAuth } from "../../contexts/CustomerAuthContext";
 import { useStation } from "../../contexts/StationContext";
@@ -64,6 +64,24 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [otpReturnStep, setOtpReturnStep] = useState<TrackStep>("list");
+
+  // Opened from the landing page with a number: /receive?phone=0241234567 searches straight away.
+  const autoPhone = useRef<string | null>(new URLSearchParams(window.location.search).get("phone"));
+  useEffect(() => {
+    const ph = autoPhone.current;
+    if (!ph || new URLSearchParams(window.location.search).get("t")) return;
+    autoPhone.current = null;
+    const normalized = toApiPhone(ph);
+    if (validatePhoneNumber(normalized)) {
+      setPhone(normalized);
+      setSearchPending(true);
+    }
+  }, []);
+  const [searchPending, setSearchPending] = useState(false);
+  useEffect(() => {
+    if (searchPending && phone) { setSearchPending(false); void handleSearch(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchPending, phone]);
 
   // Opened from the SMS: /receive?t=<token>[&parcel=<parcelId>]
   useEffect(() => {

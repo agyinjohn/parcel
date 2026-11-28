@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-    AlertCircle, ArrowRight, CheckCircle2, Loader, Package, XCircle,
+    AlertCircle, ArrowRight, CheckCircle2, Loader, XCircle,
 } from "lucide-react";
 import companyService from "../../services/companyService";
+import { BrandMark } from "../../components/BrandMark";
 
 type Status = "verifying" | "success" | "error";
 
@@ -60,11 +61,8 @@ export const VerifyEmail = (): JSX.Element => {
     return (
         <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-[#fff4ea] via-[#fbfaf8] to-[#fff7f0] px-6 py-12">
             <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
-                <Link to="/" className="mb-6 inline-flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#ea690c] to-[#c2470a] shadow-lg shadow-orange-200">
-                        <Package className="h-5 w-5 text-white" />
-                    </div>
-                    <span className="text-lg font-bold tracking-tight text-neutral-900">ParcelFlow</span>
+                <Link to="/" className="mb-6 inline-flex items-center">
+                    <BrandMark />
                 </Link>
 
                 {status === "verifying" && (

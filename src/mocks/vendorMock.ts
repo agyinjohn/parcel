@@ -107,6 +107,15 @@ export const registerVendor = (on: On, { parcels, offices, page, serialize }: Ct
     // backend-test has no edit endpoint: answer like Spring does for an unknown path.
     on("put", /^\/api-vendor\/parcels\/[^/]+$/, () => { throw { status: 404, message: "No static resource api-vendor/parcels." }; });
 
+    // Public "become a partner" request (proposed).
+    const applications: any[] = [];
+    on("post", /^\/api-vendor\/applications$/, ({ body }) => {
+        if (!body?.businessName || !body?.contactName || !body?.phoneNumber || !body?.area) throw { status: 400, message: "Business name, your name, phone and area are required" };
+        const a = { id: `pa-${applications.length + 1}`, ...body, status: "NEW", createdAt: Date.now() };
+        applications.push(a);
+        return a;
+    });
+
     on("get", /^\/api-vendor\/parcels$/, ({ params }) => {
         const q = params.get("search")?.toLowerCase();
         const status = params.get("status");

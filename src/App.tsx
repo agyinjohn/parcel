@@ -54,6 +54,7 @@ import { Settings } from "./screens/Settings/Settings";
 import { BranchSettings } from "./screens/BranchSettings/BranchSettings";
 import { CounterCashUp } from "./screens/CounterCashUp/CounterCashUp";
 import { DriverPayments } from "./screens/DriverPayments/DriverPayments";
+import { PartnerApply } from "./screens/PartnerApply/PartnerApply";
 import { PricingReview } from "./screens/Admin/PricingReview/PricingReview";
 import { CashReports } from "./screens/Admin/CashReports/CashReports";
 import { API_V2 } from "./config/api";
@@ -116,6 +117,7 @@ export const App = (): JSX.Element => {
                               <Route path="/receive" element={<CustomerAuthProvider><CustomerParcelHub /></CustomerAuthProvider>} />
 
                               {/* ── Partner Portal ── */}
+                              <Route path="/partner/apply" element={<PartnerApply />} />
                               <Route path="/partner/*" element={<ProtectedRoute allowedRoles={["VENDOR"]}><PartnerPortal /></ProtectedRoute>} />
 
                               {/* ── Root / Marketing ── */}

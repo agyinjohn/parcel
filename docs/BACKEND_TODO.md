@@ -12,6 +12,7 @@ Work in this order:
 5b. **New:** customer pages (tracking, SMS link, delivery requests), including a data leak to fix now.
 5c. **New:** distance-based delivery pricing (station price tables, quotes, new parcel fields).
 5d. **New:** partner portal gaps (edit endpoint, station list access, duplicate protection).
+5e. **New, important:** driver money safety (transactions, idempotency, totals, reversals, integrity check, indexes).
 6. **Release to production.**
 7. **Next features**, which are planned.
 
@@ -336,7 +337,53 @@ Missing on the backend:
   - Validate **all** of them first. If any is invalid, save none and return 400 with a message naming it: `"Parcel 2 (Kofi Owusu): destination station not found"`. Use 400, not 404, for invalid data; the portal reads a plain 404 or 405 as "this endpoint doesn't exist yet" and then falls back to sending one at a time.
   - The portal already uses it.
 - **Duplicate submits:** accept an `Idempotency-Key` header on `POST /api-vendor/parcels` and `/parcels/batch`. If the same key comes again within 24 hours, return the first result without creating anything. The portal sends a key per parcel or batch, and reuses it on a retry. Also reject the same `barCode` from the same partner within 24 hours with 409.
+- **"Become a partner" requests (public):** the landing page links to a form at `/partner/apply`. Partner accounts aren't public; an admin creates them in User Management (role Vendor).
+  - **Endpoint:** `POST /api-vendor/applications` with `{ businessName, contactName, phoneNumber, email?, area, parcelsPerWeek?, message? }`, no login.
+  - **Storage:** save it with status `NEW`, for the company that owns the site's domain.
+  - **Abuse protection:** at most 3 requests per phone per day, plus a simple captcha if spam appears.
+  - **For admins:** `GET /api-admin/partner-applications` and `PUT …/{id}` (status `CONTACTED`, `APPROVED` or `REJECTED`), so admins can follow up. Approving can create the Vendor user with that phone number.
+  - **Until it exists,** the form tells people to call or visit their nearest station.
 - **Delivery location (optional, recommended):** add `receiverLatitude`, `receiverLongitude`, `receiverLocationName`, `receiverPlaceId` and `receiverLocationSource` to `VendorParcelRequest`. Then partner parcels get a map pin for riders and a distance-based price (5c) like our own parcels.
+
+---
+
+## 5e. Driver money: make sure none goes missing (new, important)
+
+The Driver Payments screens now guard every step (double clicks, lost replies, someone else paying first, a total that changed, reversals, totals that don't add up). Only the server can make it safe for real. Please make these hold:
+
+**Paying (`POST /api-frontdesk/driver-payouts`)**
+- **One transaction, with row locks** on the fee lines (`SELECT … FOR UPDATE`, or an optimistic `version` column). Check every line is `READY`, belongs to this driver and has no `payoutId`, then set `payoutId` on all of them and save the payout, all in the same transaction. Two staff paying the same line at once must give one payout and one **409**.
+- **`Idempotency-Key` header:** store the key with the payout. If the same key comes again (for 24 hours), return the **same** payout without creating anything. The screen sends one key per pay dialog and reuses it on a retry after a lost reply.
+- **`expectedNetAmount`:** the net the staff member saw and is handing over. If your net (from the current fee amounts and adjustments) differs by more than GHC 0.01, return **409** with the right total: `"The total is now GHC 45.00, not GHC 40.00"`.
+- **Adjustments:** each one with an `adjustmentId` must still be open. An advance repayment can't exceed what's still owed. Otherwise 409. Update `repaidAmount` and `open` in the same transaction.
+- **Money values:** store amounts as integer pesewas or `DECIMAL(12,2)`, never floating point. Round only at the end, half-up.
+
+**Reversing (`POST /driver-payouts/{id}/reverse`)**
+- **Already reversed:** return 409.
+- **Undo everything the payout did, in one transaction:**
+  - clear `payoutId` on its lines, so they're ready again;
+  - subtract its advance repayments from `repaidAmount` and reopen those advances, and reopen saved deductions and bonuses it used;
+  - for a cash payout, put the cash back into that day's counter cash-up, or record it as cash returned.
+- **Never delete** payouts or fee lines; reversal is a flag with who, when and why.
+
+**Statement (`GET /drivers/{id}/statement?from=`)**
+- **`from` limits only paid history.** Every trip with a fee that is `WAITING`, `READY` or `ON_HOLD` must be included, however old. Otherwise old money owed drops out of view and is forgotten. The screen shows the last 60 days of paid trips, with a "Show older" button.
+- **Balances must add up.** `readyAmount`, `waitingAmount` and `onHoldAmount` must equal the sum of the listed lines in each state. Compute both from the same query. The screen shows a red "These figures don't add up, don't pay until it's checked" warning if they differ.
+
+**Integrity check (please add)**
+- **Nightly job, per station:**
+  - every `PAID` line has a non-reversed payout;
+  - every payout's `grossAmount` equals the sum of its lines;
+  - `netAmount` = gross − deductions + bonuses;
+  - no line is on two non-reversed payouts;
+  - each advance's `repaidAmount` equals the sum of its repayments on non-reversed payouts.
+- **On a failure:** write it to a table, and show it on the admin Cash & Driver Reports page (`GET /api-admin/driver-payments/integrity` → list of problems).
+
+**Heavy data**
+- **Indexes:** fee lines on `(driverId, state)`, `(officeId, state)` and `payoutId`; trips on `(driverId, arrivedAt)`; payouts on `(officeId, paidAt)` and `(driverId, paidAt)`.
+- **Paging:** `GET /driver-balances` stays paged (the screen loads 50 at a time). Compute balances with one grouped query, not per driver.
+- **Statements:** don't load fee lines for paid trips older than `from`.
+- **Old records:** never archive or delete unpaid lines or anything from the last 2 years.
 
 ---
 

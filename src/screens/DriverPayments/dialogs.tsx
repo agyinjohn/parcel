@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { X, Loader, Banknote, Smartphone, Plus, Trash2, CheckCircle2, Printer, MessageSquare } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -7,7 +7,7 @@ import { formatCurrency } from "../../utils/dataHelpers";
 import driverPayments, {
     type Driver, type DriverAdjustment, type DriverInput, type DriverPayout, type FeeLine, type MomoNetwork, type PayoutAdjustment, type PayMethod,
 } from "../../services/driverPaymentsService";
-import { ADJUSTMENT_LABEL, payoutProblem, payoutTotals, prettyPhone } from "./payoutMath";
+import { ADJUSTMENT_LABEL, payoutCovering, payoutProblem, payoutTotals, prettyPhone } from "./payoutMath";
 
 export const Modal = ({ title, sub, onClose, children, footer, wide }: { title: string; sub?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) => (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-4" role="dialog" aria-modal="true" aria-label={title}>
@@ -37,9 +37,11 @@ interface PayProps {
     openAdvances: DriverAdjustment[];
     onClose: () => void;
     onPaid: (p: DriverPayout) => void;
+    /** The screen is out of date (e.g. someone else paid some of these parcels): reload it. */
+    onStale?: () => void;
 }
 
-export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onPaid }: PayProps) => {
+export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onPaid, onStale }: PayProps) => {
     const { showToast } = useToast();
     const advanceOutstanding = (a: DriverAdjustment) => Math.max(0, (a.amount || 0) - (a.repaidAmount || 0));
     // Open items recorded earlier: advances can be recovered; saved deductions/bonuses apply by default.
@@ -53,7 +55,10 @@ export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onP
     const [momoReference, setMomoReference] = useState("");
     const [note, setNote] = useState("");
     const [saving, setSaving] = useState(false);
-
+    // One key for this payout while the dialog is open: a retry after a lost reply can't pay twice.
+    const idemKey = useRef(typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `po-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const busy = useRef(false);
+    const [failure, setFailure] = useState<string | null>(null);
     const totals = payoutTotals(lines, adjustments);
     const problem = payoutProblem(lines, adjustments, method, momoNumber, momoReference);
     const recovering = (a: DriverAdjustment) => adjustments.some((x) => x.adjustmentId === a.id);
@@ -61,8 +66,11 @@ export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onP
     const setAdj = (i: number, patch: Partial<PayoutAdjustment>) => setAdjustments((list) => list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
     const submit = async () => {
-        if (problem || !method) return;
+        if (problem || !method || busy.current) return;
+        busy.current = true;
         setSaving(true);
+        setFailure(null);
+        const lineIds = lines.map((l) => l.id);
         const res = await driverPayments.pay({
             driverId: driver.id,
             lineIds: lines.map((l) => l.id),
@@ -70,10 +78,44 @@ export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onP
             paymentMethod: method,
             ...(method === "MOMO" ? { momoNumber: momoNumber.trim(), momoReference: momoReference.trim() } : {}),
             ...(note.trim() ? { note: note.trim() } : {}),
-        });
+            expectedNetAmount: totals.net,
+        }, idemKey.current);
+        if (res.success && res.data) {
+            busy.current = false;
+            setSaving(false);
+            if (Math.abs((res.data.netAmount ?? 0) - totals.net) > 0.009) {
+                showToast(`Recorded as ${formatCurrency(res.data.netAmount)}, not ${formatCurrency(totals.net)}. Check the receipt before handing over money.`, "error");
+            }
+            onPaid(res.data);
+            return;
+        }
+        if (res.status === 409) {
+            // Out of date: someone paid some of these parcels, a fee changed, or the driver was blocked.
+            busy.current = false;
+            setSaving(false);
+            showToast(`${res.message || "These parcels changed since you opened them"}. The statement has been refreshed; nothing was paid.`, "error");
+            onStale?.();
+            return;
+        }
+        if (!res.status || res.status >= 500) {
+            // The reply was lost or the server failed: it may still have recorded the payout. Look before anyone pays again.
+            const recent = await driverPayments.payouts({ driverId: driver.id, from: Date.now() - 30 * 60 * 1000, to: Date.now() + 60 * 1000 });
+            const found = recent.success ? payoutCovering(recent.data ?? [], lineIds) : undefined;
+            busy.current = false;
+            setSaving(false);
+            if (found) {
+                showToast("The payout was recorded even though the connection dropped. Don't pay again.", "success");
+                onPaid(found);
+                return;
+            }
+            setFailure(recent.success
+                ? "The payout was not recorded. Don't hand over money yet; try again (it's safe, it can't be recorded twice)."
+                : "We couldn't reach the server to check whether the payout was recorded. Don't hand over money. Check the Payouts tab before trying again.");
+            return;
+        }
+        busy.current = false;
         setSaving(false);
-        if (res.success && res.data) onPaid(res.data);
-        else showToast(res.message || "Couldn't record the payout", "error");
+        showToast(res.message || "Couldn't record the payout", "error");
     };
 
     return (
@@ -160,6 +202,7 @@ export const PayDialog = ({ driver, lines, tripCount, openAdvances, onClose, onP
                 )}
                 {method === "CASH" && <p className="text-xs text-[#6b7280]">Cash comes out of the counter drawer and shows in today's Counter Cash-up.</p>}
                 <Input aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="border-[#d1d1d1]" />
+                {failure && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700" role="alert">{failure}</p>}
                 {problem && <p className="text-xs text-neutral-500" role="status">{problem}</p>}
             </div>
         </Modal>
@@ -218,7 +261,8 @@ export const ReceiptDialog = ({ payout: initial, station, canManage, onClose, on
         setBusy("reverse");
         const r = await driverPayments.reverse(p.id, reason.trim());
         setBusy(null);
-        if (r.success) { showToast("Payout reversed; the parcels are ready to pay again", "success"); setReversing(false); await refresh(); } else showToast(r.message || "Couldn't reverse the payout", "error");
+        if (r.success) { showToast("Payout reversed; the parcels are ready to pay again", "success"); setReversing(false); await refresh(); }
+        else { showToast(r.message || "Couldn't reverse the payout", "error"); if (r.status === 409) await refresh(); }
     };
 
     const line = (a: ReactNode, b: ReactNode, cls = "") => <div className={`flex justify-between gap-4 ${cls}`}><span>{a}</span><span className="tabular-nums text-right">{b}</span></div>;
@@ -263,6 +307,11 @@ export const ReceiptDialog = ({ payout: initial, station, canManage, onClose, on
                 {canManage && !p.reversed && !p.legacy && (
                     reversing ? (
                         <div className="space-y-2 rounded-xl border border-red-200 p-3">
+                            <p className="text-xs text-red-800">
+                                Only reverse if the money came back: the cash is back in the drawer{p.paymentMethod === "MOMO" ? ", or the MoMo was refunded" : ""}. Reversing puts these {p.lineIds?.length ?? 0} parcels back as ready to pay
+                                {(p.adjustments ?? []).some((a) => a.adjustmentId) ? " and reopens the advances and adjustments it used" : ""}.
+                                {p.confirmed && <b> The driver confirmed receiving this payout by SMS.</b>}
+                            </p>
                             <Input aria-label="Reason for reversing" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this payout being reversed?" className="border-red-200" />
                             <div className="flex gap-2">
                                 <Button size="sm" variant="outline" onClick={() => setReversing(false)}>Keep it</Button>
