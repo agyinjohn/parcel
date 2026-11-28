@@ -10,6 +10,7 @@ import { useStation } from "../../contexts/StationContext";
 import { useLocation as useLocations } from "../../contexts/LocationContext";
 import frontdeskService from "../../services/frontdeskService";
 import { API_V2 } from "../../config/api";
+import { DeliveryPricingPanel } from "./DeliveryPricingPanel";
 import {
     AlertCircle, Building2, Clock, ImageIcon, Mail, Paintbrush,
     Phone, Printer, RotateCcw, Save, UploadCloud, Banknote, Loader,
@@ -212,7 +213,7 @@ export const BranchSettings = (): JSX.Element => {
                 {/* ── Panel ── */}
                 <div className="rounded-2xl border border-[#e3e3e3] bg-white p-5 shadow-sm sm:p-7">
 
-                    {activeTab === "charges" && canSetCharges && <ChargesPanel />}
+                    {activeTab === "charges" && canSetCharges && <div className="space-y-8"><ChargesPanel /><DeliveryPricingPanel /></div>}
 
                     {/* ═══ Visual Identity ═══ */}
                     {activeTab === "identity" && (

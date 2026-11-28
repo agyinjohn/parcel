@@ -10,6 +10,7 @@ Work in this order:
 5. **New:** riders don't accept assignments.
 5a. **New:** never give a rider the same parcel twice.
 5b. **New:** customer pages (tracking, SMS link, delivery requests), including a data leak to fix now.
+5c. **New:** distance-based delivery pricing (station price tables, quotes, new parcel fields).
 6. **Release to production.**
 7. **Next features**, which are planned.
 
@@ -211,6 +212,89 @@ returns `{ "requestId": "...", "status": "PENDING" }`.
   - mark it as a customer request, so it shows in the station's ready-to-assign list.
 - **Same checks as the quote.** If anything fails after the payment was verified, keep the record and refund or flag it for the station. The page tells the customer to call the station with the payment reference.
 - **Schedule:** when parcels haven't arrived yet, `scheduledDate` and `scheduledTime` say when to deliver once they have.
+
+---
+
+## 5c. Distance-based delivery pricing, stage 1 (new)
+
+**The goal:** the delivery price is filled in from the road distance and the parcel's weight, using a price table each station manager sets. Every parcel records the suggested price, the price actually charged and why they differ, so later (stage 2) we can learn the right prices from real data.
+
+The frontend is built: Branch Settings → Charges → **Delivery prices**, and the suggested price on the intake form. Try it with `npm run dev:mock`.
+
+### Station price table
+
+`GET /api-frontdesk/office/delivery-pricing` (the caller's station; **404** if none is set) and `PUT /api-frontdesk/office/delivery-pricing` (manager only).
+
+```json
+{
+  "mode": "BANDS",
+  "bands": [ { "upToKm": 3, "price": 15 }, { "upToKm": 6, "price": 20 }, { "upToKm": 10, "price": 25 }, { "upToKm": 15, "price": 35 } ],
+  "perKmBeyond": 2,
+  "baseFee": 10, "perKm": 2, "minFee": 15,
+  "weightBands": [ { "overKg": 5, "surcharge": 5 }, { "overKg": 10, "surcharge": 10 }, { "overKg": 20, "surcharge": 20 } ],
+  "fragileFee": 3,
+  "roundTo": 1
+}
+```
+
+The GET also returns `version`, `updatedAt` and `updatedByName`.
+- **Keep every version.** Each PUT adds a new version (1, 2, 3…); never overwrite, so old parcels can still be explained.
+- **Validate.** At least one band; band distances above 0 and unique; prices above 0 and not cheaper for a longer band; nothing negative. Reject with 400 otherwise.
+- **Admins** need the same per station: `GET/PUT /api-admin/offices/{officeId}/delivery-pricing`.
+
+### The pricing rules
+
+The frontend uses exactly this (`src/utils/deliveryPricing.ts`, with tests). Please match it:
+1. **Distance** (km, one decimal):
+   - `BANDS`: the price of the first band with `km ≤ upToKm`. Past the last band: last price + `perKmBeyond` × each extra km, rounded up to whole km.
+   - `PER_KM`: `max(minFee, baseFee + perKm × km)`.
+2. **Weight:** add the `surcharge` of the **highest** weight band with `weight > overKg` (bands don't add up). No weight given: no surcharge.
+3. **Fragile:** add `fragileFee`.
+4. **Rounding:** round the total **up** to a multiple of `roundTo` (0 means don't round).
+
+### Quote
+
+`POST /api-frontdesk/delivery-pricing/quote` `{ "latitude": 5.637, "longitude": -0.165, "weightKg": 12, "fragile": false }` → 
+
+```json
+{ "distanceKm": 13.5, "distanceSource": "ROAD",
+  "lines": [ { "label": "Distance 10–15 km (13.5 km)", "amount": 35 }, { "label": "Weight (12 kg)", "amount": 10 } ],
+  "price": 45, "tableVersion": 4 }
+```
+
+- **Road distance:** from the caller's station position to the pin, by road, with the Google Routes API (`computeRoutes`, travel mode `TWO_WHEELER` for motorbikes, or `DRIVE`). Cache it by station + pin rounded to about 50 m, so the same address isn't paid for twice.
+- **If Google fails:** use the straight line × 1.35 and return `"distanceSource": "ESTIMATE"`.
+- **404** if the station has no table.
+
+If this endpoint isn't there, the intake form estimates the price itself from the table and the straight-line distance, and labels it "(estimated)".
+
+### New parcel fields
+
+`POST /api-frontdesk/parcel` now sends these on home deliveries with a pin. Store them, and return them on the parcel:
+
+| Field | Type | Notes |
+|---|---|---|
+| `distanceKm` | number | Road km from the station to the pin, as quoted. |
+| `distanceSource` | `ROAD` or `ESTIMATE` | |
+| `suggestedDeliveryCost` | number | What the table suggested. `deliveryCost` is what was charged. |
+| `pricingTableVersion` | number | The table version that priced it. |
+| `priceOverrideReason` | `BULKY`, `HARD_TO_REACH`, `REGULAR_CUSTOMER`, `PROMOTION`, `WRONG_PIN` or `OTHER` | Required when `deliveryCost` ≠ `suggestedDeliveryCost`; 400 without it. `OTHER` explains in `specialInstructions`. |
+
+- **Don't trust the sent suggestion.** Re-quote on the server and store **your** figures for `distanceKm` and `suggestedDeliveryCost`. If yours differs from the sent one by more than GHC 0.01, require the override reason as above.
+- **Who:** also store the user who registered it (you already have it from the token), so stage 2 can show overrides per staff member.
+
+### Customer delivery booking uses the same table
+
+`POST /api-user/delivery-requests/quote` (section 5b) should price each parcel with its station's table and this road distance. Suggested rule for several parcels in one trip: the highest single parcel price, plus a fixed amount for each extra parcel (a table setting, e.g. GHC 5).
+
+### Stage 2 (after about 4–6 weeks of data; for later)
+
+A weekly job, per station, over delivered parcels that have a distance:
+- the usual (median) price charged in each distance band, and the best-fitting base fee and price per km;
+- how often staff override, by reason and by staff member;
+- a proposed new table.
+
+Admins review the proposal on a new page and approve it, which creates a new table version. Details when we get there.
 
 ---
 

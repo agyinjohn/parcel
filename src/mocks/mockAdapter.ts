@@ -11,6 +11,7 @@ import {
 import API_BASE_URL from "../config/api";
 import { registerDriverPayments, driverCashOn } from "./driverPaymentsMock";
 import { registerCustomer } from "./customerMock";
+import { DEFAULT_PRICE_TABLE, estimateRoadKm, quoteFromTable, type DeliveryPriceTable } from "../utils/deliveryPricing";
 import { analyzeOffTask, checkDeliveries, normalizePoints, summarize, type DeliveryStop } from "../screens/RiderMap/trackUtils";
 
 /** Builds a DeliveryCheckResponse (updated backend) from the sample track and assignments. */
@@ -254,7 +255,32 @@ on("get", /^\/api-frontdesk\/counter-collections$/, ({ params }) => {
     return COUNTER_COLLECTIONS.filter((c) => localDay(c.pickedUpAt) === day);
 });
 registerDriverPayments(on, { driverAssignments: DRIVER_ASSIGNMENTS, findParcel, officeId: HOME_OFFICE.id, page });
-registerCustomer(on, { parcels: PARCELS, offices: OFFICES, serialize: serializeParcel });
+// Distance-based delivery pricing: one table per station (the home station has one saved).
+const PRICE_TABLES: Record<string, DeliveryPriceTable> = {
+    [HOME_OFFICE.id]: { ...DEFAULT_PRICE_TABLE, fragileFee: 3, version: 3, updatedAt: Date.now() - 6 * 864e5, updatedByName: "Kofi Mensah" },
+};
+on("get", /^\/api-frontdesk\/office\/delivery-pricing$/, () => {
+    const t = PRICE_TABLES[HOME_OFFICE.id];
+    if (!t) throw { status: 404, message: "No delivery prices set" };
+    return t;
+});
+on("put", /^\/api-frontdesk\/office\/delivery-pricing$/, ({ body }) => {
+    const prev = PRICE_TABLES[HOME_OFFICE.id];
+    PRICE_TABLES[HOME_OFFICE.id] = { ...body, version: (prev?.version ?? 0) + 1, updatedAt: Date.now(), updatedByName: "Kofi Mensah" };
+    return PRICE_TABLES[HOME_OFFICE.id];
+});
+/** Mock road distance: the real backend asks Google; here straight line × road factor. */
+export const mockDeliveryQuote = (officeId: string, lat: number, lng: number, weightKg?: number, fragile?: boolean) => {
+    const t = PRICE_TABLES[officeId];
+    const o = OFFICES.find((x) => x.id === officeId) ?? HOME_OFFICE;
+    if (!t) throw { status: 404, message: "This station has no delivery prices yet" };
+    return quoteFromTable(t, estimateRoadKm({ lat: o.latitude, lng: o.longitude }, { lat, lng }), { weightKg, fragile, distanceSource: "ROAD" });
+};
+on("post", /^\/api-frontdesk\/delivery-pricing\/quote$/, ({ body }) => {
+    if (!Number.isFinite(body?.latitude) || !Number.isFinite(body?.longitude)) throw { status: 400, message: "latitude and longitude are required" };
+    return mockDeliveryQuote(HOME_OFFICE.id, body.latitude, body.longitude, body.weightKg, body.fragile);
+});
+registerCustomer(on, { parcels: PARCELS, offices: OFFICES, serialize: serializeParcel, quote: (officeId: string, lat: number, lng: number, kg?: number) => mockDeliveryQuote(officeId, lat, lng, kg).price });
 
 // Everything through the drawer for a day: counter takings in, driver cash payouts and advances out.
 const cashMovements = (day: string) => {

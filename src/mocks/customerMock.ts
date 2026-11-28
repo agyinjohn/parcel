@@ -10,13 +10,15 @@ interface Ctx {
     parcels: any[];
     offices: any[];
     serialize: (p: any) => Record<string, unknown>;
+    /** The station's delivery price for one parcel to this point (distance-based pricing). */
+    quote: (officeId: string, lat: number, lng: number, weightKg?: number) => number;
 }
 
 export const DEMO_CUSTOMER_PHONE = "+233241234567";
 const DEMO_TOKEN = "demo-link";
 const DEMO_CODE = "123456";
 
-export const registerCustomer = (on: On, { parcels, offices, serialize }: Ctx) => {
+export const registerCustomer = (on: On, { parcels, offices, serialize, quote }: Ctx) => {
     const officeOf = (id?: string) => offices.find((o) => o.id === id) ?? offices[0];
     const digits = (s?: string) => (s ?? "").replace(/\D/g, "").slice(-9);
 
@@ -86,7 +88,9 @@ export const registerCustomer = (on: On, { parcels, offices, serialize }: Ctx) =
 
     on("post", /^\/api-user\/delivery-requests\/quote$/, ({ body }) => {
         const ps = checkRequest(body);
-        const deliveryFee = 15 + 5 * (ps.length - 1);
+        // One trip: the farthest/heaviest parcel's price, plus GHC 5 for each extra parcel.
+        const prices = ps.map((p: any) => { try { return quote(p.officeId, body.latitude, body.longitude, p.parcelWeight); } catch { return 15; } });
+        const deliveryFee = Math.max(...prices) + 5 * (ps.length - 1);
         const parcelCharges = Math.round(ps.reduce((s: number, p: any) => s + charges(p), 0) * 100) / 100;
         return { deliveryFee, parcelCharges, total: deliveryFee + parcelCharges, quoteId: `q-${Date.now()}` };
     });
